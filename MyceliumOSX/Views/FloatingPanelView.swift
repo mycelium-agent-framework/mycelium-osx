@@ -285,15 +285,26 @@ struct VoiceModeIndicator: View {
 struct TextInputField: View {
     @Environment(AppState.self) private var appState
     @State private var inputText = ""
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         TextField("Type a message...", text: $inputText)
             .textFieldStyle(.roundedBorder)
+            .focused($isFocused)
             .disabled(appState.isProcessing)
             .onSubmit {
                 guard !inputText.isEmpty, !appState.isProcessing else { return }
                 appState.sendTextMessage(inputText)
                 inputText = ""
+                // Re-focus after send
+                isFocused = true
+            }
+            .onAppear { isFocused = true }
+            .onChange(of: appState.isProcessing) {
+                // Re-focus when processing completes
+                if !appState.isProcessing {
+                    isFocused = true
+                }
             }
     }
 }
