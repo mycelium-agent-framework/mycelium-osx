@@ -7,23 +7,29 @@ final class GlobalHotkeyManager {
     private let onActivate: () -> Void
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var hasPrompted = false
 
     init(onActivate: @escaping () -> Void) {
         self.onActivate = onActivate
     }
 
     func start() {
-        // Check without prompting first
-        if AXIsProcessTrusted() {
-            installEventTap()
+        // Try to install the event tap directly.
+        // If it succeeds, we have accessibility — no prompt needed.
+        if installEventTap() {
             return
         }
 
-        // Not trusted — prompt once, then poll until granted
-        let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue(): true] as CFDictionary
-        _ = AXIsProcessTrustedWithOptions(options)
+        // Event tap failed — we need accessibility permission.
+        // Only prompt once per app lifetime.
+        if !hasPrompted {
+            hasPrompted = true
+            // Use the raw string key to avoid retain issues with the constant
+            let key = "AXTrustedCheckOptionPrompt" as CFString
+            let options = [key: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+        }
 
-        // Poll every 2 seconds until the user grants permission
         pollForAccessibility()
     }
 
@@ -43,16 +49,19 @@ final class GlobalHotkeyManager {
     private func pollForAccessibility() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
             guard let self, self.eventTap == nil else { return }
-            if AXIsProcessTrusted() {
-                print("[Hotkey] Accessibility permission granted.")
-                self.installEventTap()
+            if self.installEventTap() {
+                print("[Hotkey] Accessibility granted — event tap installed.")
             } else {
                 self.pollForAccessibility()
             }
         }
     }
 
-    private func installEventTap() {
+    /// Try to create and install the event tap. Returns true on success.
+    @discardableResult
+    private func installEventTap() -> Bool {
+        guard eventTap == nil else { return true }
+
         let mask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue)
 
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
@@ -71,8 +80,7 @@ final class GlobalHotkeyManager {
             callback: callback,
             userInfo: selfPtr
         ) else {
-            print("[Hotkey] Failed to create event tap despite being trusted.")
-            return
+            return false
         }
 
         eventTap = tap
@@ -81,6 +89,7 @@ final class GlobalHotkeyManager {
         CGEvent.tapEnable(tap: tap, enable: true)
 
         print("[Hotkey] Event tap installed. Right Option key is active.")
+        return true
     }
 
     private func handleEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
