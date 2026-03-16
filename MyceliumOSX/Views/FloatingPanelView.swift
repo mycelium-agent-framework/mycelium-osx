@@ -185,9 +185,18 @@ struct VoiceModeIndicator: View {
             }
 
             if appState.isSpeaking {
-                Text("Vivian speaking...")
-                    .font(.caption)
-                    .foregroundStyle(.blue)
+                Button {
+                    appState.voiceSession.bargeIn()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "stop.fill")
+                            .font(.caption2)
+                        Text("Interrupt")
+                            .font(.caption)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .tint(.orange)
             } else if appState.isListening {
                 Text("Listening...")
                     .font(.caption)
@@ -200,7 +209,6 @@ struct VoiceModeIndicator: View {
 
             Spacer()
 
-            // End voice mode button
             Button("End") {
                 appState.stopVoiceMode()
             }
