@@ -98,11 +98,16 @@ final class AppState {
     var isConnected: Bool { mode == .voice && voiceSession.isConnected }
     var isSpeaking: Bool { voiceSession.isSpeaking }
 
-    // MARK: - Text
+    // MARK: - Text / Local LLM
 
     private var textClient: GeminiTextClient?
+    private var ollamaClient: OllamaClient?
+    private var ollamaHistory: [OllamaClient.Message] = []
+    let localTTS = LocalTTS()
     private(set) var currentApiKey: String?
     private(set) var currentSystemInstruction: String = ""
+    /// True when Ollama is available and should be used as primary.
+    private(set) var useLocalModel = false
 
     // MARK: - Stores
 
@@ -245,35 +250,27 @@ final class AppState {
         textClient = deps.makeTextClient(apiKey, instruction)
         voiceSession.configure(apiKey: apiKey, systemInstruction: instruction)
 
-        // Warmup: send a silent ping so Gemini caches the system instruction.
-        // First real message will be fast.
-        warmUpTextClient()
+        // Check if Ollama is available for local-first mode
+        checkOllamaAvailability(systemInstruction: instruction)
     }
 
-    private var isWarmingUp = false
-
-    private func warmUpTextClient() {
-        guard let client = textClient else { return }
-        isWarmingUp = true
-        statusMessage = "Warming up..."
+    private func checkOllamaAvailability(systemInstruction: String) {
+        let client = OllamaClient(model: "gemma3:4b", systemInstruction: systemInstruction)
+        ollamaClient = client
         isProcessing = true
+        statusMessage = "Checking local model..."
 
         Task {
-            let start = Date()
-            do {
-                // A minimal prompt that gets the system instruction cached
-                let _ = try await client.send("Ready.")
-                // Clear the warmup exchange from history
-                await client.clearHistory()
-                let elapsed = String(format: "%.1f", Date().timeIntervalSince(start))
-                print("[AppState] Warmup complete in \(elapsed)s")
-            } catch {
-                print("[AppState] Warmup failed: \(error)")
-            }
-            isWarmingUp = false
+            let available = await client.isAvailable()
+            useLocalModel = available
             isProcessing = false
-            if let ring = mountedRingName {
-                statusMessage = "Ring: \(ring)"
+
+            if available {
+                statusMessage = "Ready (local: gemma3:4b)"
+                print("[AppState] Ollama available — using local model as primary")
+            } else if let ring = mountedRingName {
+                statusMessage = "Ring: \(ring) (cloud)"
+                print("[AppState] Ollama not available — using Gemini cloud")
             }
         }
     }
@@ -281,15 +278,6 @@ final class AppState {
     // MARK: - Text Input
 
     func sendTextMessage(_ text: String) {
-        guard let client = textClient else {
-            statusMessage = "Not configured. Open Settings."
-            return
-        }
-        guard !isWarmingUp else {
-            statusMessage = "Still warming up..."
-            return
-        }
-
         let userEntry = TranscriptEntry(role: .user, text: text, originPop: deviceId)
         appendTranscriptEntry(userEntry)
 
@@ -299,59 +287,81 @@ final class AppState {
         }
 
         isProcessing = true
-        statusMessage = "Thinking..."
         let startTime = Date()
-        print("[AppState] Sending text to Gemini: \(text.prefix(50))")
 
-        // Update elapsed time while waiting
-        let timerTask = Task { @MainActor in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
-                guard !Task.isCancelled else { break }
-                let elapsed = Int(Date().timeIntervalSince(startTime))
-                self.statusMessage = "Thinking... (\(elapsed)s)"
+        if useLocalModel, let ollama = ollamaClient {
+            // Local-first: use Ollama
+            statusMessage = "Local..."
+            print("[AppState] Sending to Ollama: \(text.prefix(50))")
+
+            Task {
+                do {
+                    let response = try await ollama.send(prompt: text, history: ollamaHistory)
+                    let elapsed = String(format: "%.1f", Date().timeIntervalSince(startTime))
+                    print("[AppState] Ollama response in \(elapsed)s: \(response.prefix(80))")
+
+                    OllamaClient.appendToHistory(&ollamaHistory, role: "user", content: text)
+                    OllamaClient.appendToHistory(&ollamaHistory, role: "assistant", content: response)
+                    OllamaClient.truncateHistory(&ollamaHistory)
+
+                    let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        let modelEntry = TranscriptEntry(role: .model, text: trimmed, originPop: deviceId)
+                        appendTranscriptEntry(modelEntry)
+                    }
+                    statusMessage = useLocalModel ? "Ready (local)" : (mountedRingName ?? "")
+                } catch {
+                    print("[AppState] Ollama error: \(error), falling back to Gemini")
+                    // Fallback to Gemini
+                    await sendViaGemini(text: text, startTime: startTime)
+                }
+                isProcessing = false
             }
+        } else if textClient != nil {
+            // Cloud: use Gemini
+            statusMessage = "Thinking..."
+            let timerTask = Task { @MainActor in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { break }
+                    let elapsed = Int(Date().timeIntervalSince(startTime))
+                    self.statusMessage = "Thinking... (\(elapsed)s)"
+                }
+            }
+            Task {
+                await sendViaGemini(text: text, startTime: startTime)
+                timerTask.cancel()
+                isProcessing = false
+            }
+        } else {
+            statusMessage = "Not configured. Open Settings."
+            isProcessing = false
         }
+    }
 
-        Task {
-            do {
-                let response = try await client.send(text)
-                timerTask.cancel()
-                let elapsed = String(format: "%.1f", Date().timeIntervalSince(startTime))
-                print("[AppState] Got response in \(elapsed)s: \(response.text.prefix(80))")
+    private func sendViaGemini(text: String, startTime: Date) async {
+        guard let client = textClient else { return }
+        do {
+            let response = try await client.send(text)
+            let elapsed = String(format: "%.1f", Date().timeIntervalSince(startTime))
+            print("[AppState] Gemini response in \(elapsed)s")
 
-                for tc in response.toolCalls {
-                    handleToolCall(callId: tc.id, name: tc.name, args: tc.args)
-                }
-
-                if !response.text.isEmpty {
-                    let modelEntry = TranscriptEntry(
-                        role: .model,
-                        text: response.text.trimmingCharacters(in: .whitespacesAndNewlines),
-                        originPop: deviceId
-                    )
-                    appendTranscriptEntry(modelEntry)
-                } else {
-                    print("[AppState] Empty response from Gemini")
-                    statusMessage = "Empty response"
-                }
-
-                if statusMessage == "Thinking..." {
-                    statusMessage = mountedRingName ?? ""
-                }
-            } catch {
-                timerTask.cancel()
-                print("[AppState] Text send error: \(error)")
-                statusMessage = "Error: \(error.localizedDescription)"
-                // Add error as system message so user can see it
-                let errorEntry = TranscriptEntry(
-                    role: .system,
-                    text: "Error: \(error.localizedDescription)",
+            for tc in response.toolCalls {
+                handleToolCall(callId: tc.id, name: tc.name, args: tc.args)
+            }
+            if !response.text.isEmpty {
+                let modelEntry = TranscriptEntry(
+                    role: .model,
+                    text: response.text.trimmingCharacters(in: .whitespacesAndNewlines),
                     originPop: deviceId
                 )
-                appendTranscriptEntry(errorEntry)
+                appendTranscriptEntry(modelEntry)
             }
-            isProcessing = false
+            statusMessage = mountedRingName ?? ""
+        } catch {
+            print("[AppState] Gemini error: \(error)")
+            statusMessage = "Error: \(error.localizedDescription)"
+            appendTranscriptEntry(TranscriptEntry(role: .system, text: "Error: \(error.localizedDescription)", originPop: deviceId))
         }
     }
 
