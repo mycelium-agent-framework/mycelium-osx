@@ -9,10 +9,13 @@
 /* Begin PBXBuildFile section */
 		003F565C720E508474D7A7C5 /* MyceliumApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9080A098F342DDE45993186F /* MyceliumApp.swift */; };
 		071E465FC36EA124BFCC24D1 /* GeminiLiveClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 741FB0899FAA8427A1C23510 /* GeminiLiveClient.swift */; };
+		073529694DB2AA126668608E /* ModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C65ADCB8547972985C388C41 /* ModelTests.swift */; };
 		0C18514D675C567EFB79D82D /* Spore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6771B64F87663375851FF8FE /* Spore.swift */; };
 		11587350C8D1C1B3B48DDB51 /* Tooltip.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB56213280D9AEC6C11F8D3F /* Tooltip.swift */; };
 		1DD95951D869FB5735D83D1D /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 616A162A47CEE3099C20F1E9 /* Channel.swift */; };
 		21DACA1D6582F31562B4B908 /* FloatingPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 051D33B87048F9E09FAC4508 /* FloatingPanel.swift */; };
+		23D89162B85D1970A95840FF /* GeminiLiveClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F62A49C6DEA295B3BE709DA /* GeminiLiveClientTests.swift */; };
+		2AC9BCEED597CB1396506ED6 /* RingManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0300A1CD49156E4DC38274B0 /* RingManagerTests.swift */; };
 		2E7F7634091EC1B6A30ABC0E /* TranscriptEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 616ED4BD3AE5A2751A3D4440 /* TranscriptEntry.swift */; };
 		5347A5C906129A9B7A085AB7 /* VoiceSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D6505B6259C21D6BD7499F /* VoiceSessionManager.swift */; };
 		70BF9F91F9E16D318BF41D5E /* AudioPlaybackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E18B0FD92B0C0BB949592DF9 /* AudioPlaybackManager.swift */; };
@@ -22,6 +25,7 @@
 		9C1B005BA7B6A3976AFB4A97 /* RingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF05C3564B1B833A1BD95E49 /* RingManager.swift */; };
 		AA091F6D6022223A2DC9D811 /* GeminiTextClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33EA12B661B42874FEE05C62 /* GeminiTextClient.swift */; };
 		B024A2B1AA1A4019CB098D4E /* ChannelListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5521E96E28BA3976F64A590E /* ChannelListView.swift */; };
+		B0BA7A0E338CE444BFBD0803 /* GeminiTextClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79029EAAF6A81C7725FDEE71 /* GeminiTextClientTests.swift */; };
 		B853665CD28003641CEE6CFB /* Manifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 074D3EE231DF190975F4567C /* Manifest.swift */; };
 		BE50052C07F6D6DA80896F0C /* FloatingPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C0141B35B32E9F05605250 /* FloatingPanelView.swift */; };
 		C028EE62AA6C5E03A7295249 /* SporeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ED34F9531E5E2177A2E8EAA /* SporeStore.swift */; };
@@ -45,6 +49,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0300A1CD49156E4DC38274B0 /* RingManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingManagerTests.swift; sourceTree = "<group>"; };
 		051D33B87048F9E09FAC4508 /* FloatingPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanel.swift; sourceTree = "<group>"; };
 		074D3EE231DF190975F4567C /* Manifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Manifest.swift; sourceTree = "<group>"; };
 		0B322EE3FC3D04B1B3FB6B43 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -52,6 +57,7 @@
 		18B5A74E3B9E10E772159E4E /* SporeStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SporeStoreTests.swift; sourceTree = "<group>"; };
 		33EA12B661B42874FEE05C62 /* GeminiTextClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiTextClient.swift; sourceTree = "<group>"; };
 		37798A312EC70F133BC1AA5C /* MyceliumOSXTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MyceliumOSXTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3F62A49C6DEA295B3BE709DA /* GeminiLiveClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiLiveClientTests.swift; sourceTree = "<group>"; };
 		42B9BEA44B5ECE6E0FC4AFBE /* AudioCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureManager.swift; sourceTree = "<group>"; };
 		4FDDB5348EC71E9147FB33AE /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		5521E96E28BA3976F64A590E /* ChannelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListView.swift; sourceTree = "<group>"; };
@@ -61,6 +67,7 @@
 		63D5C955CDDE531FDC62CEB5 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		6771B64F87663375851FF8FE /* Spore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Spore.swift; sourceTree = "<group>"; };
 		741FB0899FAA8427A1C23510 /* GeminiLiveClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiLiveClient.swift; sourceTree = "<group>"; };
+		79029EAAF6A81C7725FDEE71 /* GeminiTextClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiTextClientTests.swift; sourceTree = "<group>"; };
 		7DD1D292CD9BC66EF3CF130B /* TranscriptStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStore.swift; sourceTree = "<group>"; };
 		89401F2EE4D64B63C1A3E9F7 /* MyceliumOSX.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MyceliumOSX.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9080A098F342DDE45993186F /* MyceliumApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyceliumApp.swift; sourceTree = "<group>"; };
@@ -71,6 +78,7 @@
 		AF05C3564B1B833A1BD95E49 /* RingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingManager.swift; sourceTree = "<group>"; };
 		B0D6505B6259C21D6BD7499F /* VoiceSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSessionManager.swift; sourceTree = "<group>"; };
 		B5E79AD63F41C93E37AFC298 /* KeychainManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainManager.swift; sourceTree = "<group>"; };
+		C65ADCB8547972985C388C41 /* ModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelTests.swift; sourceTree = "<group>"; };
 		E18B0FD92B0C0BB949592DF9 /* AudioPlaybackManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackManager.swift; sourceTree = "<group>"; };
 		EB56213280D9AEC6C11F8D3F /* Tooltip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tooltip.swift; sourceTree = "<group>"; };
 		F7A06354E1C25CB0EC5BECDC /* TranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptView.swift; sourceTree = "<group>"; };
@@ -136,6 +144,10 @@
 		2610D03369A09C13536CC609 /* MyceliumOSXTests */ = {
 			isa = PBXGroup;
 			children = (
+				3F62A49C6DEA295B3BE709DA /* GeminiLiveClientTests.swift */,
+				79029EAAF6A81C7725FDEE71 /* GeminiTextClientTests.swift */,
+				C65ADCB8547972985C388C41 /* ModelTests.swift */,
+				0300A1CD49156E4DC38274B0 /* RingManagerTests.swift */,
 				18B5A74E3B9E10E772159E4E /* SporeStoreTests.swift */,
 				6164E8D838ED32FB91EAC84A /* TranscriptStoreTests.swift */,
 			);
@@ -304,6 +316,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				23D89162B85D1970A95840FF /* GeminiLiveClientTests.swift in Sources */,
+				B0BA7A0E338CE444BFBD0803 /* GeminiTextClientTests.swift in Sources */,
+				073529694DB2AA126668608E /* ModelTests.swift in Sources */,
+				2AC9BCEED597CB1396506ED6 /* RingManagerTests.swift in Sources */,
 				71AD76EA7AB4E8521BE43396 /* SporeStoreTests.swift in Sources */,
 				E8152BAA2BF59475C135DC2D /* TranscriptStoreTests.swift in Sources */,
 			);

@@ -235,10 +235,11 @@ final class GeminiLiveClient: @unchecked Sendable {
     }
 
     // Accumulation buffers — transcriptions arrive incrementally
-    private var userTranscriptAccum = ""
-    private var outputTranscriptAccum = ""
+    // Internal (not private) for testability
+    var _testOutputAccum = ""
+    var _testUserAccum = ""
 
-    private func handleServerContent(_ content: [String: Any]) {
+    func handleServerContent(_ content: [String: Any]) {
         let turnComplete = content["turnComplete"] as? Bool ?? false
 
         // Process model turn parts (audio + thinking text)
@@ -260,26 +261,26 @@ final class GeminiLiveClient: @unchecked Sendable {
         // Output transcription: accumulate (arrives word by word)
         if let outputTranscription = content["outputTranscription"] as? [String: Any],
            let text = outputTranscription["text"] as? String, !text.isEmpty {
-            outputTranscriptAccum = text  // Each message is the full text so far (not incremental)
+            _testOutputAccum = text  // Each message is the full text so far (not incremental)
         }
 
         // Input transcription: accumulate
         if let inputTranscription = content["inputTranscription"] as? [String: Any],
            let text = inputTranscription["text"] as? String, !text.isEmpty {
-            userTranscriptAccum = text  // Same — full text so far
+            _testUserAccum = text  // Same — full text so far
         }
 
         // On turn complete, emit accumulated transcriptions
         if turnComplete {
-            if !userTranscriptAccum.isEmpty {
-                print("[GeminiLive] User said: \(userTranscriptAccum)")
-                onUserTranscript?(userTranscriptAccum)
-                userTranscriptAccum = ""
+            if !_testUserAccum.isEmpty {
+                print("[GeminiLive] User said: \(_testUserAccum)")
+                onUserTranscript?(_testUserAccum)
+                _testUserAccum = ""
             }
-            if !outputTranscriptAccum.isEmpty {
-                print("[GeminiLive] Vivian said: \(outputTranscriptAccum)")
-                onOutputTranscript?(outputTranscriptAccum)
-                outputTranscriptAccum = ""
+            if !_testOutputAccum.isEmpty {
+                print("[GeminiLive] Vivian said: \(_testOutputAccum)")
+                onOutputTranscript?(_testOutputAccum)
+                _testOutputAccum = ""
             }
             onThinkingReceived?("", true)
         }
