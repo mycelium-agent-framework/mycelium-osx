@@ -23,6 +23,7 @@ final class VoiceSessionManager {
     // Callbacks to AppState
     var onTranscriptEntry: ((TranscriptEntry) -> Void)?
     var onPartialText: ((String) -> Void)?
+    var onThinkingText: ((String) -> Void)?
     var onToolCall: ((String, String, [String: Any]) -> Void)?
     var onConnectionChange: ((Bool) -> Void)?
     var onStatusMessage: ((String) -> Void)?
@@ -57,6 +58,12 @@ final class VoiceSessionManager {
         client.onTextReceived = { [weak self] text, isFinal in
             Task { @MainActor [weak self] in
                 self?.handleText(text, isFinal: isFinal)
+            }
+        }
+
+        client.onThinkingReceived = { [weak self] text, isFinal in
+            Task { @MainActor [weak self] in
+                self?.handleThinking(text, isFinal: isFinal)
             }
         }
 
@@ -204,6 +211,20 @@ final class VoiceSessionManager {
     }
 
     // MARK: - Handlers
+
+    private var thinkingBuffer = ""
+
+    private func handleThinking(_ text: String, isFinal: Bool) {
+        if isFinal {
+            let fullThinking = thinkingBuffer + text
+            thinkingBuffer = ""
+            if !fullThinking.isEmpty {
+                onThinkingText?(fullThinking)
+            }
+        } else {
+            thinkingBuffer += text
+        }
+    }
 
     private func handleText(_ text: String, isFinal: Bool) {
         if isFinal {

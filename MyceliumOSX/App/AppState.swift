@@ -22,6 +22,8 @@ final class AppState {
     // MARK: - Conversation
 
     var transcript: [TranscriptEntry] = []
+    var lastThinking: String = ""  // Most recent thinking block (shown in verbose mode)
+    var showThinking = false       // Toggle for verbose/thinking view
     var partialText: String = ""
     var statusMessage: String = ""
     var isProcessing = false
@@ -297,6 +299,9 @@ final class AppState {
         }
         voiceSession.onToolCall = { [weak self] callId, name, args in
             self?.handleToolCall(callId: callId, name: name, args: args)
+        }
+        voiceSession.onThinkingText = { [weak self] text in
+            self?.lastThinking = text
         }
         voiceSession.onStatusMessage = { [weak self] message in
             self?.statusMessage = message

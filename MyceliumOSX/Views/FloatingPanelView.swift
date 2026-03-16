@@ -3,14 +3,19 @@ import SwiftUI
 struct FloatingPanelView: View {
     @Environment(AppState.self) private var appState
 
+    @State private var showSidebar = false
+
     var body: some View {
         VStack(spacing: 0) {
             headerBar
             Divider()
 
-            HSplitView {
-                ChannelListView()
-                    .frame(minWidth: 100, maxWidth: 140)
+            HStack(spacing: 0) {
+                if showSidebar {
+                    ChannelListView()
+                        .frame(width: 130)
+                    Divider()
+                }
 
                 VStack(spacing: 0) {
                     TranscriptView()
@@ -19,7 +24,7 @@ struct FloatingPanelView: View {
                 }
             }
         }
-        .frame(minWidth: 380, minHeight: 400)
+        .frame(minWidth: 320, minHeight: 400)
         .background(.ultraThinMaterial)
     }
 
@@ -27,12 +32,22 @@ struct FloatingPanelView: View {
 
     private var headerBar: some View {
         HStack {
+            // Sidebar toggle
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    showSidebar.toggle()
+                }
+            } label: {
+                Image(systemName: "sidebar.left")
+                    .foregroundStyle(showSidebar ? .primary : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Toggle channels sidebar")
+
             Circle()
-                .fill(appState.mode == .voice && appState.isConnected ? .green :
-                      appState.mountedRingName != nil ? .yellow : .red)
+                .fill(appState.mountedRingName != nil ? .green : .red)
                 .frame(width: 8, height: 8)
 
-            // Ring switcher dropdown
             RingSwitcher()
 
             if !appState.statusMessage.isEmpty {
@@ -61,6 +76,16 @@ struct FloatingPanelView: View {
                         .symbolEffect(.variableColor)
                 }
             }
+
+            // Verbose/thinking toggle
+            Button {
+                appState.showThinking.toggle()
+            } label: {
+                Image(systemName: appState.showThinking ? "brain.fill" : "brain")
+                    .foregroundStyle(appState.showThinking ? .purple : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help(appState.showThinking ? "Hide thinking" : "Show thinking (verbose)")
 
             Button {
                 appState.isPanelVisible = false

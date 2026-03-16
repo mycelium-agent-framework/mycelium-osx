@@ -17,8 +17,9 @@ final class GeminiLiveClient: @unchecked Sendable {
     private(set) var isConnected = false
     private(set) var isSetupComplete = false
 
-    var onTextReceived: ((String, Bool) -> Void)?  // (text, isFinal)
-    var onAudioReceived: ((Data) -> Void)?          // PCM audio data
+    var onTextReceived: ((String, Bool) -> Void)?      // (text, isFinal)
+    var onThinkingReceived: ((String, Bool) -> Void)?  // (text, isFinal) — thinking blocks
+    var onAudioReceived: ((Data) -> Void)?              // PCM audio data
     var onToolCall: ((String, String, [String: Any]) -> Void)?
     var onError: ((Error) -> Void)?
     var onDisconnect: (() -> Void)?
@@ -65,8 +66,7 @@ final class GeminiLiveClient: @unchecked Sendable {
                         ]
                     ],
                     "thinkingConfig": [
-                        "includeThoughts": false,
-                        "thinkingBudget": 0
+                        "includeThoughts": true
                     ]
                 ],
                 "systemInstruction": [
@@ -232,11 +232,14 @@ final class GeminiLiveClient: @unchecked Sendable {
         let turnComplete = content["turnComplete"] as? Bool ?? false
 
         for part in parts {
-            // Skip thinking/reasoning blocks
-            if part["thought"] as? Bool == true { continue }
+            let isThought = part["thought"] as? Bool ?? false
 
             if let text = part["text"] as? String {
-                onTextReceived?(text, turnComplete)
+                if isThought {
+                    onThinkingReceived?(text, turnComplete)
+                } else {
+                    onTextReceived?(text, turnComplete)
+                }
             }
 
             if let inlineData = part["inlineData"] as? [String: Any],
