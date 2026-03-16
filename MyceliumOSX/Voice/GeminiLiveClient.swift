@@ -63,6 +63,10 @@ final class GeminiLiveClient: @unchecked Sendable {
                                 "voiceName": "Aoede"
                             ]
                         ]
+                    ],
+                    "thinkingConfig": [
+                        "includeThoughts": false,
+                        "thinkingBudget": 0
                     ]
                 ],
                 "systemInstruction": [
@@ -228,6 +232,9 @@ final class GeminiLiveClient: @unchecked Sendable {
         let turnComplete = content["turnComplete"] as? Bool ?? false
 
         for part in parts {
+            // Skip thinking/reasoning blocks
+            if part["thought"] as? Bool == true { continue }
+
             if let text = part["text"] as? String {
                 onTextReceived?(text, turnComplete)
             }
