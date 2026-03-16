@@ -161,7 +161,11 @@ final class VoiceSessionManager {
     private func beginCapture() {
         var chunkCount = 0
         capture.onAudioChunk = { [weak self] data in
-            self?.gemini?.sendAudio(pcmData: data)
+            guard let self else { return }
+            // Half-duplex: don't send mic audio while Vivian is speaking
+            // (prevents echo loop where she hears herself and responds to it)
+            guard !self.isSpeaking else { return }
+            self.gemini?.sendAudio(pcmData: data)
             chunkCount += 1
             if chunkCount == 1 {
                 print("[VoiceSession] First audio chunk sent (\(data.count) bytes)")
@@ -222,12 +226,18 @@ final class VoiceSessionManager {
         }
     }
 
+    private var speakingTimer: Task<Void, Never>?
+
     private func handleAudio(_ data: Data) {
         isSpeaking = true
         playback.enqueue(pcmData: data)
 
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(300))
+        // Reset the "done speaking" timer on each audio chunk.
+        // Only mark as not speaking after 500ms with no new audio.
+        speakingTimer?.cancel()
+        speakingTimer = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
             self.isSpeaking = false
         }
     }
