@@ -73,20 +73,20 @@ final class AppState {
         let ring0URL = URL(fileURLWithPath: expandedPath)
         bootstrap(ring0Path: ring0URL)
 
-        // Auto-mount first allowed ring
+        // Mount first allowed ring using user-configured path from Settings
         if let manifest = manifest,
            let pop = manifest.pops.first(where: { $0.deviceId == deviceId }),
-           let firstRingName = pop.allowedRings.first,
-           let ring = manifest.rings.first(where: { $0.name == firstRingName }),
-           let hint = ring.localPathHint {
-            let ringPath = URL(fileURLWithPath: NSString(string: hint).expandingTildeInPath)
-            if FileManager.default.fileExists(atPath: ringPath.path) {
-                mountRing(path: ringPath, name: firstRingName)
+           let firstRingName = pop.allowedRings.first {
+
+            let userPath = defaults.string(forKey: "ringPath.\(firstRingName)") ?? ""
+            if !userPath.isEmpty, FileManager.default.fileExists(atPath: userPath) {
+                print("[AppState] Mounting ring '\(firstRingName)' from \(userPath)")
+                mountRing(path: URL(fileURLWithPath: userPath), name: firstRingName)
+            } else {
+                print("[AppState] Ring '\(firstRingName)' path not configured or doesn't exist: '\(userPath)'")
+                statusMessage = "Set path for '\(firstRingName)' in Settings"
             }
         }
-
-        // Configure voice from the mounted ring's backend config
-        configureVoiceForCurrentRing()
     }
 
     func bootstrap(ring0Path: URL) {

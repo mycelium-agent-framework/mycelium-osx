@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// Manages a standalone NSWindow for settings (works reliably with LSUIElement apps).
 @MainActor
 final class SettingsWindowController {
     static let shared = SettingsWindowController()
@@ -24,7 +23,7 @@ final class SettingsWindowController {
         let hostingView = NSHostingView(rootView: settingsView)
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 520, height: 500),
+            contentRect: NSRect(x: 0, y: 0, width: 560, height: 600),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -54,7 +53,9 @@ struct SettingsView: View {
                         TextField("Path to vivian-core repo", text: $ring0PathString)
                             .textFieldStyle(.roundedBorder)
                         Button("Browse...") {
-                            browseForDirectory()
+                            browseForDirectory("Select the vivian-core repository") { url in
+                                ring0PathString = url.path
+                            }
                         }
                     }
 
@@ -70,12 +71,10 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("API Keys (per ring, stored in Keychain)") {
-                    if ring0PathString.isEmpty {
-                        Text("Set Ring 0 path first to see ring backends.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
+                if isValidRing0(ring0PathString) {
+                    RingPathsSection(ring0Path: ring0PathString)
+
+                    Section("API Keys (per ring, stored in Keychain)") {
                         ApiKeyListView(ring0Path: ring0PathString)
                     }
                 }
@@ -92,22 +91,11 @@ struct SettingsView: View {
             }
             .padding()
         }
-        .frame(width: 520, height: 500)
-    }
-
-    private func browseForDirectory() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.message = "Select the vivian-core repository directory"
-
-        if panel.runModal() == .OK, let url = panel.url {
-            ring0PathString = url.path
-        }
+        .frame(width: 560, height: 600)
     }
 
     private func isValidRing0(_ path: String) -> Bool {
+        guard !path.isEmpty else { return false }
         let expanded = NSString(string: path).expandingTildeInPath
         let fm = FileManager.default
         return fm.fileExists(atPath: expanded + "/SOUL.md")
@@ -115,12 +103,105 @@ struct SettingsView: View {
     }
 }
 
-/// Reads the manifest to discover rings and their api_key_ref,
-/// then shows a SecureField per ref for Keychain entry.
+// MARK: - Ring Paths
+
+/// Shows each ring from the manifest with a user-configurable local path.
+/// Paths are stored in UserDefaults as "ringPath.<ringName>".
+struct RingPathsSection: View {
+    let ring0Path: String
+    @State private var rings: [RingInfo] = []
+
+    struct RingInfo: Identifiable {
+        let name: String
+        let hint: String?
+        var id: String { name }
+    }
+
+    var body: some View {
+        Section("Ring Paths") {
+            ForEach(rings) { ring in
+                RingPathRow(ring: ring)
+            }
+
+            if rings.isEmpty {
+                Text("No rings found in manifest.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .onAppear { loadRings() }
+        .onChange(of: ring0Path) { loadRings() }
+    }
+
+    private func loadRings() {
+        let expanded = NSString(string: ring0Path).expandingTildeInPath
+        let manifestURL = URL(fileURLWithPath: expanded).appendingPathComponent("manifest.json")
+
+        guard let data = try? Data(contentsOf: manifestURL),
+              let manifest = try? JSONDecoder().decode(Manifest.self, from: data)
+        else {
+            rings = []
+            return
+        }
+
+        rings = manifest.rings.map { RingInfo(name: $0.name, hint: $0.localPathHint) }
+
+        // Pre-populate from hints if no user config exists yet
+        for ring in rings {
+            let key = "ringPath.\(ring.name)"
+            if UserDefaults.standard.string(forKey: key) == nil, let hint = ring.hint {
+                UserDefaults.standard.set(NSString(string: hint).expandingTildeInPath, forKey: key)
+            }
+        }
+    }
+}
+
+struct RingPathRow: View {
+    let ring: RingPathsSection.RingInfo
+    @State private var path: String = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(ring.name)
+                .font(.caption)
+                .fontWeight(.semibold)
+
+            HStack {
+                TextField("Local path to \(ring.name)", text: $path)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: path) {
+                        UserDefaults.standard.set(path, forKey: "ringPath.\(ring.name)")
+                    }
+                Button("Browse...") {
+                    browseForDirectory("Select the \(ring.name) repository") { url in
+                        path = url.path
+                    }
+                }
+            }
+
+            if !path.isEmpty {
+                let exists = FileManager.default.fileExists(atPath: path + "/SOUL.md")
+                HStack(spacing: 4) {
+                    Image(systemName: exists ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundStyle(exists ? .green : .red)
+                    Text(exists ? "Ring found" : "SOUL.md not found at this path")
+                        .font(.caption2)
+                        .foregroundColor(exists ? .secondary : .red)
+                }
+            }
+        }
+        .onAppear {
+            path = UserDefaults.standard.string(forKey: "ringPath.\(ring.name)") ?? ""
+        }
+    }
+}
+
+// MARK: - API Keys
+
 struct ApiKeyListView: View {
     let ring0Path: String
     @State private var keyRefs: [(ringName: String, ref: String, provider: String, model: String)] = []
-    @State private var keyValues: [String: String] = [:]  // ref -> current input
+    @State private var keyValues: [String: String] = [:]
     @State private var savedRefs: Set<String> = []
 
     var body: some View {
@@ -190,7 +271,6 @@ struct ApiKeyListView: View {
         for ring in manifest.rings {
             if let backend = ring.backend {
                 refs.append((ring.name, backend.apiKeyRef, backend.provider, backend.model))
-                // Load existing value from Keychain (masked — just check if it exists)
                 if let existing = KeychainManager.get(ref: backend.apiKeyRef) {
                     values[backend.apiKeyRef] = existing
                     saved.insert(backend.apiKeyRef)
@@ -201,5 +281,19 @@ struct ApiKeyListView: View {
         keyRefs = refs
         keyValues = values
         savedRefs = saved
+    }
+}
+
+// MARK: - Shared
+
+private func browseForDirectory(_ message: String, onSelect: @escaping (URL) -> Void) {
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.allowsMultipleSelection = false
+    panel.message = message
+
+    if panel.runModal() == .OK, let url = panel.url {
+        onSelect(url)
     }
 }
