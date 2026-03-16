@@ -71,6 +71,8 @@ struct SettingsView: View {
                     }
                 }
 
+                OllamaStatusSection()
+
                 if isValidRing0(ring0PathString) {
                     RingPathsSection(ring0Path: ring0PathString)
 
@@ -100,6 +102,108 @@ struct SettingsView: View {
         let fm = FileManager.default
         return fm.fileExists(atPath: expanded + "/SOUL.md")
             && fm.fileExists(atPath: expanded + "/manifest.json")
+    }
+}
+
+// MARK: - Ollama Status
+
+struct OllamaStatusSection: View {
+    @State private var isChecking = true
+    @State private var isRunning = false
+    @State private var models: [String] = []
+    @State private var activeModel: String = "gemma3:4b"
+
+    var body: some View {
+        Section("Local Model (Ollama)") {
+            HStack(spacing: 8) {
+                if isChecking {
+                    ProgressView().controlSize(.small)
+                    Text("Checking Ollama...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Image(systemName: isRunning ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundStyle(isRunning ? .green : .red)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(isRunning ? "Ollama running" : "Ollama not running")
+                            .font(.caption)
+                        if !isRunning {
+                            Text("brew services start ollama")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                if isRunning {
+                    Button("Refresh") { checkStatus() }
+                        .font(.caption)
+                }
+            }
+
+            if isRunning && !models.isEmpty {
+                HStack {
+                    Text("Models:")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(models.joined(separator: ", "))
+                        .font(.caption)
+                }
+
+                if !models.contains(where: { $0.hasPrefix("gemma3") }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                        VStack(alignment: .leading) {
+                            Text("gemma3:4b not installed")
+                                .font(.caption)
+                            Text("ollama pull gemma3:4b")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+            }
+        }
+        .onAppear { checkStatus() }
+    }
+
+    private func checkStatus() {
+        isChecking = true
+        Task {
+            guard let url = URL(string: "http://localhost:11434/api/tags") else {
+                isChecking = false
+                isRunning = false
+                return
+            }
+
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 3
+
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200,
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let modelList = json["models"] as? [[String: Any]]
+                else {
+                    isRunning = false
+                    isChecking = false
+                    return
+                }
+
+                models = modelList.compactMap { $0["name"] as? String }.sorted()
+                isRunning = true
+            } catch {
+                isRunning = false
+                models = []
+            }
+            isChecking = false
+        }
     }
 }
 
