@@ -1,0 +1,40 @@
+name: MyceliumOSX
+options:
+  bundleIdPrefix: org.mycelium
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+targets:
+  MyceliumOSX:
+    type: application
+    platform: macOS
+    sources:
+      - MyceliumOSX
+    settings:
+      base:
+        INFOPLIST_FILE: MyceliumOSX/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: MyceliumOSX/Resources/MyceliumOSX.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: org.mycelium.osx
+        PRODUCT_NAME: MyceliumOSX
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    scheme:
+      testTargets:
+        - MyceliumOSXTests
+
+  MyceliumOSXTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - MyceliumOSXTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: "YES"
+    dependencies:
+      - target: MyceliumOSX

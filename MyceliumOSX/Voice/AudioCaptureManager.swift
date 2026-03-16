@@ -1,0 +1,89 @@
+import AVFoundation
+import Foundation
+
+/// Captures microphone audio as 16-bit PCM, 16kHz mono for Gemini Live API.
+@Observable
+final class AudioCaptureManager {
+    private let engine = AVAudioEngine()
+    private var isCapturing = false
+
+    /// Called with each chunk of PCM data (16-bit LE, 16kHz mono).
+    var onAudioChunk: ((Data) -> Void)?
+
+    /// Target format for Gemini Live: 16kHz, mono, 16-bit integer
+    private let targetFormat = AVAudioFormat(
+        commonFormat: .pcmFormatInt16,
+        sampleRate: 16000,
+        channels: 1,
+        interleaved: true
+    )!
+
+    func startCapture() throws {
+        guard !isCapturing else { return }
+
+        let inputNode = engine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+
+        // Install a tap that converts to our target format
+        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+            print("[AudioCapture] Could not create format converter")
+            return
+        }
+
+        // Tap at the input node's native format, then convert
+        let bufferSize: AVAudioFrameCount = 1600 // 100ms at 16kHz
+        inputNode.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] buffer, _ in
+            guard let self else { return }
+            self.convertAndDeliver(buffer: buffer, converter: converter)
+        }
+
+        try engine.start()
+        isCapturing = true
+        print("[AudioCapture] Microphone capture started.")
+    }
+
+    func stopCapture() {
+        guard isCapturing else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        isCapturing = false
+        print("[AudioCapture] Microphone capture stopped.")
+    }
+
+    private func convertAndDeliver(buffer: AVAudioPCMBuffer, converter: AVAudioConverter) {
+        // Calculate output frame count based on sample rate ratio
+        let ratio = targetFormat.sampleRate / buffer.format.sampleRate
+        let outputFrameCount = AVAudioFrameCount(Double(buffer.frameLength) * ratio)
+
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCount) else {
+            return
+        }
+
+        var error: NSError?
+        var consumed = false
+        converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+            if consumed {
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+            consumed = true
+            outStatus.pointee = .haveData
+            return buffer
+        }
+
+        if let error {
+            print("[AudioCapture] Conversion error: \(error)")
+            return
+        }
+
+        // Extract raw PCM bytes
+        guard let channelData = outputBuffer.int16ChannelData else { return }
+        let byteCount = Int(outputBuffer.frameLength) * MemoryLayout<Int16>.size
+        let data = Data(bytes: channelData[0], count: byteCount)
+        onAudioChunk?(data)
+    }
+
+    deinit {
+        stopCapture()
+    }
+}
