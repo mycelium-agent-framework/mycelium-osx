@@ -113,7 +113,6 @@ struct RingPathsSection: View {
 
     struct RingInfo: Identifiable {
         let name: String
-        let hint: String?
         var id: String { name }
     }
 
@@ -144,15 +143,7 @@ struct RingPathsSection: View {
             return
         }
 
-        rings = manifest.rings.map { RingInfo(name: $0.name, hint: $0.localPathHint) }
-
-        // Pre-populate from hints if no user config exists yet
-        for ring in rings {
-            let key = "ringPath.\(ring.name)"
-            if UserDefaults.standard.string(forKey: key) == nil, let hint = ring.hint {
-                UserDefaults.standard.set(NSString(string: hint).expandingTildeInPath, forKey: key)
-            }
-        }
+        rings = manifest.rings.map { RingInfo(name: $0.name) }
     }
 }
 

@@ -30,14 +30,12 @@ struct BackendConfig: Codable, Sendable {
 struct RingEntry: Codable, Sendable {
     let name: String
     let repoUrl: String
-    let localPathHint: String?
     let accessRules: [String: [String]]
     let backend: BackendConfig?
 
     enum CodingKeys: String, CodingKey {
         case name, backend
         case repoUrl = "repo_url"
-        case localPathHint = "local_path_hint"
         case accessRules = "access_rules"
     }
 }

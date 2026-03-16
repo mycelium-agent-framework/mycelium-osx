@@ -132,15 +132,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let ring0URL = URL(fileURLWithPath: expandedPath)
         appState.bootstrap(ring0Path: ring0URL)
 
-        // Auto-mount first allowed ring
+        // Auto-mount first allowed ring using user-configured path from Settings
         if let manifest = appState.manifest,
            let pop = manifest.pops.first(where: { $0.deviceId == appState.deviceId }),
-           let firstRingName = pop.allowedRings.first,
-           let ring = manifest.rings.first(where: { $0.name == firstRingName }),
-           let hint = ring.localPathHint {
-            let ringPath = URL(fileURLWithPath: NSString(string: hint).expandingTildeInPath)
-            if FileManager.default.fileExists(atPath: ringPath.path) {
-                appState.mountRing(path: ringPath, name: firstRingName)
+           let firstRingName = pop.allowedRings.first {
+            let userPath = defaults.string(forKey: "ringPath.\(firstRingName)") ?? ""
+            if !userPath.isEmpty, FileManager.default.fileExists(atPath: userPath) {
+                appState.mountRing(path: URL(fileURLWithPath: userPath), name: firstRingName)
             }
         }
 
