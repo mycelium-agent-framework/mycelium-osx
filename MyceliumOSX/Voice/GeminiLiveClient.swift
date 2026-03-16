@@ -23,7 +23,7 @@ final class GeminiLiveClient: @unchecked Sendable {
     private let apiKey: String
     private let model: String
 
-    init(apiKey: String, model: String = "gemini-2.0-flash-live-001") {
+    init(apiKey: String, model: String = "gemini-2.5-flash-native-audio-latest") {
         self.apiKey = apiKey
         self.model = model
     }
@@ -47,7 +47,7 @@ final class GeminiLiveClient: @unchecked Sendable {
             "setup": [
                 "model": "models/\(model)",
                 "generationConfig": [
-                    "responseModalities": ["AUDIO", "TEXT"],
+                    "responseModalities": ["AUDIO"],
                     "speechConfig": [
                         "voiceConfig": [
                             "prebuiltVoiceConfig": [
