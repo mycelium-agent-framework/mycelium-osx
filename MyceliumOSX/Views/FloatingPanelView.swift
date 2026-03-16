@@ -72,7 +72,7 @@ struct FloatingPanelView: View {
         HStack(spacing: 8) {
             // Mic toggle
             Button {
-                appState.isListening.toggle()
+                appState.voiceSession.toggleListening()
             } label: {
                 Image(systemName: appState.isListening ? "mic.fill" : "mic.slash.fill")
                     .font(.title3)
@@ -85,9 +85,15 @@ struct FloatingPanelView: View {
             if !appState.isListening {
                 TextInputField()
             } else {
-                Text("Listening...")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(.red)
+                        .frame(width: 6, height: 6)
+                        .opacity(appState.isListening ? 1 : 0)
+                    Text("Listening...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
             }
 
@@ -133,17 +139,7 @@ struct TextInputField: View {
             .textFieldStyle(.roundedBorder)
             .onSubmit {
                 guard !inputText.isEmpty else { return }
-                let entry = TranscriptEntry(
-                    role: .user,
-                    text: inputText,
-                    originPop: appState.deviceId
-                )
-                appState.transcript.append(entry)
-                if let store = appState.transcriptStore,
-                   let channel = appState.activeChannel {
-                    store.append(entry: entry, channel: channel.name)
-                }
-                // TODO: Send to Gemini client
+                appState.sendTextMessage(inputText)
                 inputText = ""
             }
     }

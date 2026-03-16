@@ -17,9 +17,6 @@ final class AppState {
     // MARK: - Conversation
 
     var transcript: [TranscriptEntry] = []
-    var isListening = false
-    var isConnected = false
-    var isSpeaking = false
     var partialText: String = ""
 
     // MARK: - Panel
@@ -30,6 +27,21 @@ final class AppState {
 
     let deviceId = "osx-desktop"
 
+    // MARK: - Voice
+
+    let voiceSession = VoiceSessionManager()
+
+    var isListening: Bool {
+        get { voiceSession.isListening }
+        set {
+            if newValue { voiceSession.startListening() }
+            else { voiceSession.stopListening() }
+        }
+    }
+
+    var isConnected: Bool { voiceSession.isConnected }
+    var isSpeaking: Bool { voiceSession.isSpeaking }
+
     // MARK: - Managers
 
     var ringManager: RingManager?
@@ -38,21 +50,48 @@ final class AppState {
 
     // MARK: - Initialization
 
+    init() {
+        setupVoiceCallbacks()
+    }
+
     func bootstrap(ring0Path: URL) {
         self.ring0Path = ring0Path
         self.ringManager = RingManager(ring0Path: ring0Path)
 
-        // Load manifest and SOUL
         if let rm = ringManager {
             self.manifest = rm.loadManifest()
             self.soulContent = rm.loadSOUL() ?? ""
         }
     }
 
+    /// Call after bootstrap + ring mount to configure and start voice.
+    func configureVoice(apiKey: String) {
+        // Build system instruction from SOUL.md + ring SOUL.md + recent context
+        var instruction = soulContent
+
+        // Append ring-specific SOUL if we have a mounted ring
+        if let ringPath = mountedRingPath, let rm = ringManager {
+            if let ringSoul = rm.loadSOUL(ringPath: ringPath) {
+                instruction += "\n\n---\n\n" + ringSoul
+            }
+        }
+
+        // Append recent context from last handoff spore
+        if let store = sporeStore {
+            let handoffs = store.loadAll().filter { $0.type == .handoff }
+            if let lastHandoff = handoffs.last, let recap = lastHandoff.contextRecap {
+                instruction += "\n\n---\nPrevious session context:\n" + recap
+            }
+        }
+
+        voiceSession.configure(apiKey: apiKey, systemInstruction: instruction)
+    }
+
+    // MARK: - Ring & Channel
+
     func mountRing(path: URL, name: String) {
-        // Commit any current state before switching
         if let current = mountedRingPath {
-            gitCommit(path: current, message: "Auto-commit before ring switch to \(name)")
+            commitAndPersist(path: current, message: "Auto-commit before ring switch to \(name)")
         }
 
         mountedRingPath = path
@@ -60,7 +99,6 @@ final class AppState {
         sporeStore = SporeStore(ringPath: path, deviceId: deviceId)
         transcriptStore = TranscriptStore(ringPath: path, deviceId: deviceId)
 
-        // Load channels
         channels = scanChannels(ringPath: path)
         if let defaultChannel = channels.first(where: { $0.name == "default" }) ?? channels.first {
             switchChannel(to: defaultChannel)
@@ -69,7 +107,6 @@ final class AppState {
 
     func switchChannel(to channel: Channel) {
         activeChannel = channel
-        // Load recent transcript for this channel
         if let store = transcriptStore {
             transcript = store.loadRecentEntries(channel: channel.name, limit: 50)
         }
@@ -82,6 +119,108 @@ final class AppState {
         let gitkeep = channelDir.appendingPathComponent(".gitkeep")
         FileManager.default.createFile(atPath: gitkeep.path, contents: nil)
         channels = scanChannels(ringPath: ringPath)
+    }
+
+    // MARK: - Text Input
+
+    func sendTextMessage(_ text: String) {
+        let entry = TranscriptEntry(
+            role: .user,
+            text: text,
+            originPop: deviceId
+        )
+        appendTranscriptEntry(entry)
+        voiceSession.sendText(text)
+    }
+
+    // MARK: - Session End
+
+    func endVoiceSession() {
+        voiceSession.endSession()
+        generateHandoffSpore()
+        if let ringPath = mountedRingPath {
+            commitAndPersist(path: ringPath, message: "Session ended")
+        }
+    }
+
+    // MARK: - Voice Callbacks
+
+    private func setupVoiceCallbacks() {
+        voiceSession.onTranscriptEntry = { [weak self] entry in
+            self?.appendTranscriptEntry(entry)
+        }
+
+        voiceSession.onPartialText = { [weak self] text in
+            self?.partialText = text
+        }
+
+        voiceSession.onToolCall = { [weak self] callId, name, args in
+            self?.handleToolCall(callId: callId, name: name, args: args)
+        }
+    }
+
+    private func appendTranscriptEntry(_ entry: TranscriptEntry) {
+        transcript.append(entry)
+        if let store = transcriptStore, let channel = activeChannel {
+            store.append(entry: entry, channel: channel.name)
+        }
+    }
+
+    // MARK: - Tool Call Handling
+
+    private func handleToolCall(callId: String, name: String, args: [String: Any]) {
+        switch name {
+        case "remember_this":
+            handleRememberThis(callId: callId, args: args)
+        default:
+            print("[AppState] Unknown tool call: \(name)")
+            voiceSession.sendToolResponse(callId: callId, result: ["error": "Unknown tool"])
+        }
+    }
+
+    private func handleRememberThis(callId: String, args: [String: Any]) {
+        guard let content = args["content"] as? String,
+              let typeStr = args["spore_type"] as? String,
+              let sporeType = SporeType(rawValue: typeStr)
+        else {
+            voiceSession.sendToolResponse(callId: callId, result: ["error": "Invalid arguments"])
+            return
+        }
+
+        let spore = Spore(
+            type: sporeType,
+            channel: activeChannel?.name ?? "default",
+            content: content,
+            originPop: deviceId
+        )
+        sporeStore?.append(spore: spore)
+
+        voiceSession.sendToolResponse(callId: callId, result: [
+            "status": "saved",
+            "spore_id": spore.id,
+            "type": typeStr,
+        ])
+
+        print("[AppState] Saved spore via tool call: \(sporeType.rawValue) — \(content.prefix(60))")
+    }
+
+    // MARK: - Handoff
+
+    private func generateHandoffSpore() {
+        guard let store = sporeStore, !transcript.isEmpty else { return }
+
+        let recentTopics = transcript.suffix(10).map(\.text).joined(separator: " ")
+        let recap = String(recentTopics.prefix(500))
+
+        let spore = Spore(
+            type: .handoff,
+            status: .done,
+            channel: activeChannel?.name ?? "default",
+            content: "Session ended on macOS.",
+            contextRecap: recap,
+            originPop: deviceId
+        )
+        store.append(spore: spore)
     }
 
     // MARK: - Helpers
@@ -102,17 +241,19 @@ final class AppState {
         }.sorted { $0.name < $1.name }
     }
 
-    private func gitCommit(path: URL, message: String) {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["-C", path.path, "add", "-A"]
-        try? process.run()
-        process.waitUntilExit()
+    private func commitAndPersist(path: URL, message: String) {
+        Task.detached {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            process.arguments = ["-C", path.path, "add", "-A"]
+            try? process.run()
+            process.waitUntilExit()
 
-        let commitProcess = Process()
-        commitProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        commitProcess.arguments = ["-C", path.path, "commit", "-m", message, "--allow-empty-message"]
-        try? commitProcess.run()
-        commitProcess.waitUntilExit()
+            let commitProcess = Process()
+            commitProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            commitProcess.arguments = ["-C", path.path, "commit", "-m", message]
+            try? commitProcess.run()
+            commitProcess.waitUntilExit()
+        }
     }
 }

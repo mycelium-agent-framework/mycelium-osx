@@ -13,6 +13,7 @@
 		1DD95951D869FB5735D83D1D /* Channel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 616A162A47CEE3099C20F1E9 /* Channel.swift */; };
 		21DACA1D6582F31562B4B908 /* FloatingPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 051D33B87048F9E09FAC4508 /* FloatingPanel.swift */; };
 		2E7F7634091EC1B6A30ABC0E /* TranscriptEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 616ED4BD3AE5A2751A3D4440 /* TranscriptEntry.swift */; };
+		5347A5C906129A9B7A085AB7 /* VoiceSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D6505B6259C21D6BD7499F /* VoiceSessionManager.swift */; };
 		70BF9F91F9E16D318BF41D5E /* AudioPlaybackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E18B0FD92B0C0BB949592DF9 /* AudioPlaybackManager.swift */; };
 		71AD76EA7AB4E8521BE43396 /* SporeStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18B5A74E3B9E10E772159E4E /* SporeStoreTests.swift */; };
 		7A9ABA1B7C3C336EDDC0B993 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDDB5348EC71E9147FB33AE /* AppState.swift */; };
@@ -62,6 +63,7 @@
 		A9C0141B35B32E9F05605250 /* FloatingPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanelView.swift; sourceTree = "<group>"; };
 		AC03DFD7945CA7917DC238BA /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		AF05C3564B1B833A1BD95E49 /* RingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingManager.swift; sourceTree = "<group>"; };
+		B0D6505B6259C21D6BD7499F /* VoiceSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSessionManager.swift; sourceTree = "<group>"; };
 		E18B0FD92B0C0BB949592DF9 /* AudioPlaybackManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackManager.swift; sourceTree = "<group>"; };
 		F7A06354E1C25CB0EC5BECDC /* TranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -73,6 +75,7 @@
 				42B9BEA44B5ECE6E0FC4AFBE /* AudioCaptureManager.swift */,
 				E18B0FD92B0C0BB949592DF9 /* AudioPlaybackManager.swift */,
 				741FB0899FAA8427A1C23510 /* GeminiLiveClient.swift */,
+				B0D6505B6259C21D6BD7499F /* VoiceSessionManager.swift */,
 			);
 			path = Voice;
 			sourceTree = "<group>";
@@ -269,6 +272,7 @@
 				2E7F7634091EC1B6A30ABC0E /* TranscriptEntry.swift in Sources */,
 				CECEA2C65EEC670B18E1585E /* TranscriptStore.swift in Sources */,
 				C7E3471E48C7BD3C38D9745B /* TranscriptView.swift in Sources */,
+				5347A5C906129A9B7A085AB7 /* VoiceSessionManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

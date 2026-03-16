@@ -10,15 +10,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupFloatingPanel()
         setupHotkey()
-        loadRing0()
+        loadConfiguration()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager?.stop()
-        // Generate handoff spore on quit
-        Task { @MainActor in
-            generateHandoffSpore()
-        }
+        appState.endVoiceSession()
     }
 
     // MARK: - Floating Panel
@@ -32,9 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.contentView = hostingView
         self.floatingPanel = panel
 
-        // Observe panel visibility
         Task { @MainActor in
-            // Poll-free observation via withObservationTracking
             observePanelVisibility()
         }
     }
@@ -79,67 +74,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func handleHotkeyActivation() {
         if appState.isPanelVisible {
+            // Dismiss panel and stop listening
             appState.isPanelVisible = false
+            appState.isListening = false
             return
         }
 
-        // Simulate media Play/Pause key to pause any playing media
+        // Pause media
         simulateMediaPlayPause()
 
+        // Show panel and start listening
         appState.isPanelVisible = true
         NSApp.activate(ignoringOtherApps: true)
-
-        // Start listening
         appState.isListening = true
     }
 
     private func simulateMediaPlayPause() {
-        // NX_KEYTYPE_PLAY = 16
-        let keyCode: UInt32 = 16
+        let keyCode: UInt32 = 16 // NX_KEYTYPE_PLAY
 
-        // Key down
         if let event = NSEvent.otherEvent(
-            with: .systemDefined,
-            location: .zero,
-            modifierFlags: [],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            subtype: 8, // NX_SUBTYPE_AUX_CONTROL_BUTTONS
-            data1: Int((keyCode << 16) | (0xa << 8)), // key down
-            data2: -1
+            with: .systemDefined, location: .zero, modifierFlags: [],
+            timestamp: 0, windowNumber: 0, context: nil,
+            subtype: 8, data1: Int((keyCode << 16) | (0xa << 8)), data2: -1
         ) {
             event.cgEvent?.post(tap: .cghidEventTap)
         }
 
-        // Key up
         if let event = NSEvent.otherEvent(
-            with: .systemDefined,
-            location: .zero,
-            modifierFlags: [],
-            timestamp: 0,
-            windowNumber: 0,
-            context: nil,
-            subtype: 8,
-            data1: Int((keyCode << 16) | (0xb << 8)), // key up
-            data2: -1
+            with: .systemDefined, location: .zero, modifierFlags: [],
+            timestamp: 0, windowNumber: 0, context: nil,
+            subtype: 8, data1: Int((keyCode << 16) | (0xb << 8)), data2: -1
         ) {
             event.cgEvent?.post(tap: .cghidEventTap)
         }
     }
 
-    // MARK: - Ring Loading
+    // MARK: - Configuration
 
     @MainActor
-    private func loadRing0() {
-        guard let pathString = UserDefaults.standard.string(forKey: "ring0Path"),
-              !pathString.isEmpty else { return }
+    private func loadConfiguration() {
+        let defaults = UserDefaults.standard
+
+        // Load Ring 0
+        guard let pathString = defaults.string(forKey: "ring0Path"),
+              !pathString.isEmpty else {
+            print("[AppDelegate] No ring0Path configured. Open Settings.")
+            return
+        }
 
         let expandedPath = NSString(string: pathString).expandingTildeInPath
-        let url = URL(fileURLWithPath: expandedPath)
-        appState.bootstrap(ring0Path: url)
+        let ring0URL = URL(fileURLWithPath: expandedPath)
+        appState.bootstrap(ring0Path: ring0URL)
 
-        // Auto-mount the first allowed ring for this PoP
+        // Auto-mount first allowed ring
         if let manifest = appState.manifest,
            let pop = manifest.pops.first(where: { $0.deviceId == appState.deviceId }),
            let firstRingName = pop.allowedRings.first,
@@ -150,25 +137,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 appState.mountRing(path: ringPath, name: firstRingName)
             }
         }
-    }
 
-    // MARK: - Handoff
-
-    @MainActor
-    private func generateHandoffSpore() {
-        guard let store = appState.sporeStore, !appState.transcript.isEmpty else { return }
-
-        let recentTopics = appState.transcript.suffix(10).map(\.text).joined(separator: " ")
-        let recap = String(recentTopics.prefix(500))
-
-        let spore = Spore(
-            type: .handoff,
-            status: .done,
-            channel: appState.activeChannel?.name ?? "default",
-            content: "Session ended on macOS.",
-            contextRecap: recap,
-            originPop: appState.deviceId
-        )
-        store.append(spore: spore)
+        // Configure voice with API key
+        let apiKey = defaults.string(forKey: "geminiApiKey") ?? ""
+        if !apiKey.isEmpty {
+            appState.configureVoice(apiKey: apiKey)
+        }
     }
 }
