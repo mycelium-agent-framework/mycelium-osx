@@ -2,8 +2,61 @@ import Foundation
 import SwiftUI
 
 enum InteractionMode: String {
-    case text    // Default: REST API, type messages
-    case voice   // Explicit: WebSocket Live API, mic + audio playback
+    case text
+    case voice
+}
+
+/// Dependencies that AppState needs, injectable for testing.
+struct AppDependencies {
+    var loadManifest: (URL) -> Manifest?
+    var loadSOUL: (URL) -> String?
+    var keychainGet: (String) -> String?
+    var fileExists: (String) -> Bool
+    var scanChannels: (URL) -> [Channel]
+    var makeSporeStore: (URL, String) -> SporeStore
+    var makeTranscriptStore: (URL, String) -> TranscriptStore
+    var makeTextClient: (String, String) -> GeminiTextClient
+    var commitAndPersist: (URL, String) -> Void
+
+    static let live = AppDependencies(
+        loadManifest: { url in
+            let rm = RingManager(ring0Path: url)
+            return rm.loadManifest()
+        },
+        loadSOUL: { url in
+            try? String(contentsOf: url.appendingPathComponent("SOUL.md"), encoding: .utf8)
+        },
+        keychainGet: { KeychainManager.get(ref: $0) },
+        fileExists: { FileManager.default.fileExists(atPath: $0) },
+        scanChannels: { ringPath in
+            let channelsDir = ringPath.appendingPathComponent("channels")
+            guard let contents = try? FileManager.default.contentsOfDirectory(
+                at: channelsDir, includingPropertiesForKeys: [.isDirectoryKey],
+                options: .skipsHiddenFiles
+            ) else { return [] }
+            return contents.compactMap { url in
+                var isDir: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
+                      isDir.boolValue else { return nil }
+                return Channel(name: url.lastPathComponent, ringPath: ringPath)
+            }.sorted { $0.name < $1.name }
+        },
+        makeSporeStore: { SporeStore(ringPath: $0, deviceId: $1) },
+        makeTranscriptStore: { TranscriptStore(ringPath: $0, deviceId: $1) },
+        makeTextClient: { GeminiTextClient(apiKey: $0, systemInstruction: $1) },
+        commitAndPersist: { path, message in
+            Task.detached {
+                let add = Process()
+                add.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+                add.arguments = ["-C", path.path, "add", "-A"]
+                try? add.run(); add.waitUntilExit()
+                let commit = Process()
+                commit.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+                commit.arguments = ["-C", path.path, "commit", "-m", message]
+                try? commit.run(); commit.waitUntilExit()
+            }
+        }
+    )
 }
 
 @MainActor
@@ -22,8 +75,8 @@ final class AppState {
     // MARK: - Conversation
 
     var transcript: [TranscriptEntry] = []
-    var lastThinking: String = ""  // Most recent thinking block (shown in verbose mode)
-    var showThinking = false       // Toggle for verbose/thinking view
+    var lastThinking: String = ""
+    var showThinking = false
     var partialText: String = ""
     var statusMessage: String = ""
     var isProcessing = false
@@ -37,25 +90,28 @@ final class AppState {
 
     let deviceId = "osx-desktop"
 
-    // MARK: - Voice (only used in voice mode)
+    // MARK: - Voice
 
-    let voiceSession = VoiceSessionManager()
+    let voiceSession: VoiceSessionManager
 
     var isRecording: Bool { voiceSession.isRecording }
     var isConnected: Bool { mode == .voice && voiceSession.isConnected }
     var isSpeaking: Bool { voiceSession.isSpeaking }
 
-    // MARK: - Text (default mode)
+    // MARK: - Text
 
     private var textClient: GeminiTextClient?
-    private var currentApiKey: String?
-    private var currentSystemInstruction: String = ""
+    private(set) var currentApiKey: String?
+    private(set) var currentSystemInstruction: String = ""
 
-    // MARK: - Managers
+    // MARK: - Stores
 
-    var ringManager: RingManager?
     var sporeStore: SporeStore?
     var transcriptStore: TranscriptStore?
+
+    // MARK: - Dependencies
+
+    let deps: AppDependencies
 
     // MARK: - Initialization
 
@@ -63,7 +119,9 @@ final class AppState {
         !(UserDefaults.standard.string(forKey: "ring0Path") ?? "").isEmpty
     }
 
-    init() {
+    init(deps: AppDependencies = .live, voiceSession: VoiceSessionManager? = nil) {
+        self.deps = deps
+        self.voiceSession = voiceSession ?? VoiceSessionManager()
         setupVoiceCallbacks()
     }
 
@@ -77,12 +135,11 @@ final class AppState {
         let ring0URL = URL(fileURLWithPath: expandedPath)
         bootstrap(ring0Path: ring0URL)
 
-        // Mount first allowed ring using user-configured path
         if let manifest = manifest,
            let pop = manifest.pops.first(where: { $0.deviceId == deviceId }),
            let firstRingName = pop.allowedRings.first {
             let userPath = defaults.string(forKey: "ringPath.\(firstRingName)") ?? ""
-            if !userPath.isEmpty, FileManager.default.fileExists(atPath: userPath) {
+            if !userPath.isEmpty, deps.fileExists(userPath) {
                 mountRing(path: URL(fileURLWithPath: userPath), name: firstRingName)
             } else {
                 statusMessage = "Set path for '\(firstRingName)' in Settings"
@@ -92,47 +149,43 @@ final class AppState {
 
     func bootstrap(ring0Path: URL) {
         self.ring0Path = ring0Path
-        self.ringManager = RingManager(ring0Path: ring0Path)
-
-        if let rm = ringManager {
-            self.manifest = rm.loadManifest()
-            self.soulContent = rm.loadSOUL() ?? ""
-        }
+        self.manifest = deps.loadManifest(ring0Path)
+        self.soulContent = deps.loadSOUL(ring0Path) ?? ""
     }
 
     // MARK: - Ring & Channel
 
     func mountRing(path: URL, name: String) {
-        // End any active voice session (different ring = different backend)
         if mode == .voice {
             voiceSession.endSession()
             mode = .text
         }
 
         if let current = mountedRingPath {
-            commitAndPersist(path: current, message: "Auto-commit before ring switch to \(name)")
+            deps.commitAndPersist(current, "Auto-commit before ring switch to \(name)")
         }
 
         mountedRingPath = path
         mountedRingName = name
-        sporeStore = SporeStore(ringPath: path, deviceId: deviceId)
-        transcriptStore = TranscriptStore(ringPath: path, deviceId: deviceId)
+        sporeStore = deps.makeSporeStore(path, deviceId)
+        transcriptStore = deps.makeTranscriptStore(path, deviceId)
 
-        channels = scanChannels(ringPath: path)
+        channels = deps.scanChannels(path)
         if let generalChannel = channels.first(where: { $0.name == "general" }) ?? channels.first {
             switchChannel(to: generalChannel)
         }
 
-        // Resolve API key and build system instruction for this ring
         configureBackendForCurrentRing()
-        statusMessage = "Ring: \(name)"
+        // Only set success status if backend config didn't set an error
+        if currentApiKey != nil {
+            statusMessage = "Ring: \(name)"
+        }
     }
 
-    /// Switch to a different ring by name. Reads path from UserDefaults.
     func switchToRing(named name: String) {
         guard name != mountedRingName else { return }
         let userPath = UserDefaults.standard.string(forKey: "ringPath.\(name)") ?? ""
-        guard !userPath.isEmpty, FileManager.default.fileExists(atPath: userPath) else {
+        guard !userPath.isEmpty, deps.fileExists(userPath) else {
             statusMessage = "Path for '\(name)' not set. Open Settings."
             return
         }
@@ -144,7 +197,6 @@ final class AppState {
         if let store = transcriptStore {
             transcript = store.loadRecentEntries(channel: channel.name, limit: 50)
         }
-        // Clear text client history on channel switch
         Task { await textClient?.clearHistory() }
     }
 
@@ -154,12 +206,12 @@ final class AppState {
         try? FileManager.default.createDirectory(at: channelDir, withIntermediateDirectories: true)
         let gitkeep = channelDir.appendingPathComponent(".gitkeep")
         FileManager.default.createFile(atPath: gitkeep.path, contents: nil)
-        channels = scanChannels(ringPath: ringPath)
+        channels = deps.scanChannels(ringPath)
     }
 
     // MARK: - Backend Configuration
 
-    private func configureBackendForCurrentRing() {
+    func configureBackendForCurrentRing() {
         guard let ringName = mountedRingName,
               let manifest = manifest,
               let ring = manifest.rings.first(where: { $0.name == ringName }),
@@ -169,15 +221,14 @@ final class AppState {
             return
         }
 
-        guard let apiKey = KeychainManager.get(ref: backend.apiKeyRef) else {
+        guard let apiKey = deps.keychainGet(backend.apiKeyRef) else {
             statusMessage = "No API key for '\(backend.apiKeyRef)'. Open Settings."
             return
         }
 
-        // Build system instruction
         var instruction = soulContent
-        if let ringPath = mountedRingPath, let rm = ringManager {
-            if let ringSoul = rm.loadSOUL(ringPath: ringPath) {
+        if let ringPath = mountedRingPath {
+            if let ringSoul = deps.loadSOUL(ringPath) {
                 instruction += "\n\n---\n\n" + ringSoul
             }
         }
@@ -191,16 +242,11 @@ final class AppState {
         currentApiKey = apiKey
         currentSystemInstruction = instruction
 
-        // Create text client (default mode)
-        textClient = GeminiTextClient(apiKey: apiKey, systemInstruction: instruction)
-
-        // Pre-configure voice session (used only when user switches to voice mode)
+        textClient = deps.makeTextClient(apiKey, instruction)
         voiceSession.configure(apiKey: apiKey, systemInstruction: instruction)
-
-        print("[AppState] Backend configured for '\(ringName)' via '\(backend.apiKeyRef)'")
     }
 
-    // MARK: - Text Input (default mode)
+    // MARK: - Text Input
 
     func sendTextMessage(_ text: String) {
         guard textClient != nil else {
@@ -208,28 +254,21 @@ final class AppState {
             return
         }
 
-        // Add user entry to transcript
         let userEntry = TranscriptEntry(role: .user, text: text, originPop: deviceId)
         appendTranscriptEntry(userEntry)
 
         if mode == .voice {
-            // In voice mode, send via WebSocket
             voiceSession.sendText(text)
         } else {
-            // In text mode, send via REST
             isProcessing = true
             statusMessage = "Thinking..."
 
             Task {
                 do {
                     let response = try await textClient!.send(text)
-
-                    // Handle tool calls
                     for tc in response.toolCalls {
                         handleToolCall(callId: tc.id, name: tc.name, args: tc.args)
                     }
-
-                    // Add model response to transcript
                     if !response.text.isEmpty {
                         let modelEntry = TranscriptEntry(
                             role: .model,
@@ -238,11 +277,9 @@ final class AppState {
                         )
                         appendTranscriptEntry(modelEntry)
                     }
-
                     statusMessage = mountedRingName ?? ""
                 } catch {
                     statusMessage = "Error: \(error.localizedDescription)"
-                    print("[AppState] Text send error: \(error)")
                 }
                 isProcessing = false
             }
@@ -257,10 +294,7 @@ final class AppState {
             return
         }
         mode = .voice
-        // Just connect the session — mic is controlled by push-to-talk
-        Task {
-            _ = await voiceSession.startSession()
-        }
+        Task { _ = await voiceSession.startSession() }
     }
 
     func stopVoiceMode() {
@@ -271,22 +305,16 @@ final class AppState {
     }
 
     func toggleVoiceMode() {
-        if mode == .voice {
-            stopVoiceMode()
-        } else {
-            startVoiceMode()
-        }
+        if mode == .voice { stopVoiceMode() } else { startVoiceMode() }
     }
 
     // MARK: - Session End
 
     func endSession() {
-        if mode == .voice {
-            voiceSession.endSession()
-        }
+        if mode == .voice { voiceSession.endSession() }
         generateHandoffSpore()
         if let ringPath = mountedRingPath {
-            commitAndPersist(path: ringPath, message: "Session ended")
+            deps.commitAndPersist(ringPath, "Session ended")
         }
     }
 
@@ -299,18 +327,18 @@ final class AppState {
         voiceSession.onPartialText = { [weak self] text in
             self?.partialText = text
         }
-        voiceSession.onToolCall = { [weak self] callId, name, args in
-            self?.handleToolCall(callId: callId, name: name, args: args)
-        }
         voiceSession.onThinkingText = { [weak self] text in
             self?.lastThinking = text
+        }
+        voiceSession.onToolCall = { [weak self] callId, name, args in
+            self?.handleToolCall(callId: callId, name: name, args: args)
         }
         voiceSession.onStatusMessage = { [weak self] message in
             self?.statusMessage = message
         }
     }
 
-    private func appendTranscriptEntry(_ entry: TranscriptEntry) {
+    func appendTranscriptEntry(_ entry: TranscriptEntry) {
         transcript.append(entry)
         if let store = transcriptStore, let channel = activeChannel {
             store.append(entry: entry, channel: channel.name)
@@ -357,36 +385,5 @@ final class AppState {
             contextRecap: recap, originPop: deviceId
         )
         store.append(spore: spore)
-    }
-
-    // MARK: - Helpers
-
-    private func scanChannels(ringPath: URL) -> [Channel] {
-        let channelsDir = ringPath.appendingPathComponent("channels")
-        guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: channelsDir, includingPropertiesForKeys: [.isDirectoryKey],
-            options: .skipsHiddenFiles
-        ) else { return [] }
-
-        return contents.compactMap { url in
-            var isDir: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
-                  isDir.boolValue else { return nil }
-            return Channel(name: url.lastPathComponent, ringPath: ringPath)
-        }.sorted { $0.name < $1.name }
-    }
-
-    private func commitAndPersist(path: URL, message: String) {
-        Task.detached {
-            let add = Process()
-            add.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            add.arguments = ["-C", path.path, "add", "-A"]
-            try? add.run(); add.waitUntilExit()
-
-            let commit = Process()
-            commit.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            commit.arguments = ["-C", path.path, "commit", "-m", message]
-            try? commit.run(); commit.waitUntilExit()
-        }
     }
 }

@@ -8,6 +8,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: GlobalHotkeyManager?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Skip setup during unit tests
+        guard !isRunningTests else { return }
+
         // Preload all Keychain keys into memory (one prompt instead of many)
         KeychainManager.preloadAll()
 
@@ -19,6 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             SettingsWindowController.shared.show(appState: appState)
         }
+    }
+
+    private var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
     func applicationWillTerminate(_ notification: Notification) {

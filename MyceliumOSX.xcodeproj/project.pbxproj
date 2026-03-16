@@ -21,6 +21,7 @@
 		2CE57FBE885E09C89CEDC5A1 /* MockKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1525FCD05E20D52BDB27ACE3 /* MockKeychain.swift */; };
 		2E7F7634091EC1B6A30ABC0E /* TranscriptEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 616ED4BD3AE5A2751A3D4440 /* TranscriptEntry.swift */; };
 		3CDDF8179F4898ED576E3C48 /* GlobalHotkeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 965B921DEEE9E217795A6FE6 /* GlobalHotkeyManagerTests.swift */; };
+		51DC18127B8203964B9E2B9B /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04F4A69569554B2CD72AA79D /* AppStateTests.swift */; };
 		5347A5C906129A9B7A085AB7 /* VoiceSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D6505B6259C21D6BD7499F /* VoiceSessionManager.swift */; };
 		6F9516A20D709FE030E5A5D9 /* MockGeminiLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = B66AA58990F46E5E2847F0E2 /* MockGeminiLive.swift */; };
 		70BF9F91F9E16D318BF41D5E /* AudioPlaybackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E18B0FD92B0C0BB949592DF9 /* AudioPlaybackManager.swift */; };
@@ -59,6 +60,7 @@
 
 /* Begin PBXFileReference section */
 		0300A1CD49156E4DC38274B0 /* RingManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingManagerTests.swift; sourceTree = "<group>"; };
+		04F4A69569554B2CD72AA79D /* AppStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
 		051D33B87048F9E09FAC4508 /* FloatingPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanel.swift; sourceTree = "<group>"; };
 		074D3EE231DF190975F4567C /* Manifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Manifest.swift; sourceTree = "<group>"; };
 		0B322EE3FC3D04B1B3FB6B43 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -171,6 +173,7 @@
 		2610D03369A09C13536CC609 /* MyceliumOSXTests */ = {
 			isa = PBXGroup;
 			children = (
+				04F4A69569554B2CD72AA79D /* AppStateTests.swift */,
 				3F62A49C6DEA295B3BE709DA /* GeminiLiveClientTests.swift */,
 				79029EAAF6A81C7725FDEE71 /* GeminiTextClientTests.swift */,
 				965B921DEEE9E217795A6FE6 /* GlobalHotkeyManagerTests.swift */,
@@ -360,6 +363,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				51DC18127B8203964B9E2B9B /* AppStateTests.swift in Sources */,
 				23D89162B85D1970A95840FF /* GeminiLiveClientTests.swift in Sources */,
 				B0BA7A0E338CE444BFBD0803 /* GeminiTextClientTests.swift in Sources */,
 				3CDDF8179F4898ED576E3C48 /* GlobalHotkeyManagerTests.swift in Sources */,
