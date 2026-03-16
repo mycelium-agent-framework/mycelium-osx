@@ -74,6 +74,9 @@ actor GeminiTextClient {
         var toolCalls: [(String, String, [String: Any])] = []
 
         for part in parts {
+            // Skip thinking/reasoning blocks
+            if part["thought"] as? Bool == true { continue }
+
             if let text = part["text"] as? String {
                 responseText += text
             }

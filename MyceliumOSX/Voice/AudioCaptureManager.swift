@@ -10,6 +10,9 @@ final class AudioCaptureManager {
     /// Called with each chunk of PCM data (16-bit LE, 16kHz mono).
     var onAudioChunk: ((Data) -> Void)?
 
+    /// Current audio level (0.0 to 1.0) for UI feedback.
+    var audioLevel: Float = 0.0
+
     /// Target format for Gemini Live: 16kHz, mono, 16-bit integer
     private let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16,
@@ -102,8 +105,24 @@ final class AudioCaptureManager {
 
         // Extract raw PCM bytes
         guard let channelData = outputBuffer.int16ChannelData else { return }
-        let byteCount = Int(outputBuffer.frameLength) * MemoryLayout<Int16>.size
+        let frameCount = Int(outputBuffer.frameLength)
+        let byteCount = frameCount * MemoryLayout<Int16>.size
         let data = Data(bytes: channelData[0], count: byteCount)
+
+        // Compute RMS audio level for UI feedback
+        let samples = channelData[0]
+        var sum: Float = 0
+        for i in 0..<frameCount {
+            let sample = Float(samples[i]) / Float(Int16.max)
+            sum += sample * sample
+        }
+        let rms = sqrt(sum / max(Float(frameCount), 1))
+        // Smooth and clamp to 0-1
+        let level = min(rms * 3.0, 1.0) // amplify for visibility
+        DispatchQueue.main.async { [weak self] in
+            self?.audioLevel = level
+        }
+
         onAudioChunk?(data)
     }
 

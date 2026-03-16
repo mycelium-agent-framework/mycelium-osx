@@ -77,30 +77,37 @@ struct FloatingPanelView: View {
     // MARK: - Input Bar
 
     private var inputBar: some View {
-        HStack(spacing: 8) {
-            // Voice mode toggle
-            Button {
-                appState.toggleVoiceMode()
-            } label: {
-                Image(systemName: appState.mode == .voice ? "waveform.circle.fill" : "waveform.circle")
-                    .font(.title3)
-                    .foregroundStyle(appState.mode == .voice ? .green : .secondary)
+        VStack(spacing: 6) {
+            // Voice mode indicator (large, pulsing when active)
+            if appState.mode == .voice {
+                VoiceModeIndicator()
             }
-            .buttonStyle(.plain)
-            .help(appState.mode == .voice ? "Switch to text mode" : "Switch to voice mode")
 
-            // Text input (always available)
-            TextInputField()
+            HStack(spacing: 8) {
+                // Voice mode toggle
+                Button {
+                    appState.toggleVoiceMode()
+                } label: {
+                    Image(systemName: appState.mode == .voice ? "waveform.circle.fill" : "waveform.circle")
+                        .font(.title3)
+                        .foregroundStyle(appState.mode == .voice ? .green : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help(appState.mode == .voice ? "Switch to text mode" : "Switch to voice mode")
 
-            // Remember button
-            Button {
-                promoteToSpore()
-            } label: {
-                Image(systemName: "brain.head.profile")
-                    .font(.title3)
+                // Text input (always available)
+                TextInputField()
+
+                // Remember button
+                Button {
+                    promoteToSpore()
+                } label: {
+                    Image(systemName: "brain.head.profile")
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+                .help("Remember the last exchange")
             }
-            .buttonStyle(.plain)
-            .help("Remember the last exchange")
         }
         .padding(10)
     }
@@ -161,6 +168,61 @@ struct RingSwitcher: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+    }
+}
+
+struct VoiceModeIndicator: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Audio level bars
+            ForEach(0..<5, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(barColor)
+                    .frame(width: 4, height: barHeight(index: i))
+                    .animation(.easeInOut(duration: 0.1), value: appState.voiceSession.audioLevel)
+            }
+
+            if appState.isSpeaking {
+                Text("Vivian speaking...")
+                    .font(.caption)
+                    .foregroundStyle(.blue)
+            } else if appState.isListening {
+                Text("Listening...")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            } else {
+                Text("Connecting...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            // End voice mode button
+            Button("End") {
+                appState.stopVoiceMode()
+            }
+            .font(.caption)
+            .buttonStyle(.bordered)
+        }
+        .padding(.horizontal, 4)
+        .frame(height: 30)
+    }
+
+    private var barColor: Color {
+        appState.isSpeaking ? .blue : .green
+    }
+
+    private func barHeight(index: Int) -> CGFloat {
+        let level = CGFloat(appState.voiceSession.audioLevel)
+        let base: CGFloat = 4
+        let maxHeight: CGFloat = 24
+        // Each bar has a slightly different threshold for visual variety
+        let threshold = CGFloat(index) * 0.15
+        let active = max(level - threshold, 0) / (1.0 - threshold)
+        return base + active * (maxHeight - base)
     }
 }
 

@@ -13,6 +13,9 @@ final class VoiceSessionManager {
     private(set) var isListening = false
     private(set) var isSpeaking = false
 
+    /// Mic audio level (0.0-1.0) for UI visualization.
+    var audioLevel: Float { capture.audioLevel }
+
     private var partialBuffer = ""
     private var connectingTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
@@ -117,20 +120,26 @@ final class VoiceSessionManager {
 
     func startListening() {
         connectingTask = Task { @MainActor in
-            // Request mic permission
+            onStatusMessage?("Requesting mic access...")
+
             let micOk = await capture.requestPermission()
             guard micOk else {
                 print("[VoiceSession] Microphone permission denied.")
-                onStatusMessage?("Microphone access denied")
+                onStatusMessage?("Mic denied — open System Settings > Privacy > Microphone")
                 return
             }
+            print("[VoiceSession] Mic permission granted.")
 
-            // Connect if needed
             if !isConnected {
+                onStatusMessage?("Connecting to Gemini Live...")
                 let ok = await startSession()
-                guard ok else { return }
+                guard ok else {
+                    onStatusMessage?("Failed to connect to Gemini")
+                    return
+                }
             }
 
+            onStatusMessage?("Starting mic capture...")
             beginCapture()
         }
     }
@@ -150,14 +159,20 @@ final class VoiceSessionManager {
     }
 
     private func beginCapture() {
+        var chunkCount = 0
         capture.onAudioChunk = { [weak self] data in
             self?.gemini?.sendAudio(pcmData: data)
+            chunkCount += 1
+            if chunkCount == 1 {
+                print("[VoiceSession] First audio chunk sent (\(data.count) bytes)")
+            }
         }
 
         do {
             try capture.startCapture()
             isListening = true
-            onStatusMessage?("Listening...")
+            onStatusMessage?("Voice active — speak now")
+            print("[VoiceSession] Mic capture started, streaming to Gemini")
         } catch {
             print("[VoiceSession] Failed to start capture: \(error)")
             onStatusMessage?("Mic error: \(error.localizedDescription)")

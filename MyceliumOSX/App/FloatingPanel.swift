@@ -12,7 +12,7 @@ final class FloatingPanel: NSPanel {
 
         isFloatingPanel = true
         level = .floating
-        isMovableByWindowBackground = true
+        isMovableByWindowBackground = false
         titlebarAppearsTransparent = true
         titleVisibility = .hidden
         backgroundColor = .clear
