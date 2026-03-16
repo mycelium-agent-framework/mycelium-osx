@@ -18,8 +18,32 @@ final class AudioCaptureManager {
         interleaved: true
     )!
 
+    /// Request microphone permission explicitly.
+    /// On macOS 14+, even non-sandboxed apps must request authorization.
+    func requestPermission() async -> Bool {
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        switch status {
+        case .authorized:
+            return true
+        case .notDetermined:
+            return await AVCaptureDevice.requestAccess(for: .audio)
+        case .denied, .restricted:
+            print("[AudioCapture] Microphone access denied. Open System Settings > Privacy > Microphone.")
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
     func startCapture() throws {
         guard !isCapturing else { return }
+
+        // Check mic permission synchronously — caller should have awaited requestPermission() first
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        guard status == .authorized else {
+            print("[AudioCapture] Microphone not authorized (status: \(status.rawValue)). Cannot capture.")
+            return
+        }
 
         let inputNode = engine.inputNode
         let inputFormat = inputNode.outputFormat(forBus: 0)

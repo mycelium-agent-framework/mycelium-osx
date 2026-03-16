@@ -100,17 +100,20 @@ final class VoiceSessionManager {
     // MARK: - Listening
 
     func startListening() {
-        guard isConnected else {
-            // Auto-start session if not connected
-            startSession()
-            // Wait a beat for connection, then start capture
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(500))
-                self.beginCapture()
+        Task { @MainActor in
+            // Request mic permission first (triggers system prompt if needed)
+            let granted = await capture.requestPermission()
+            guard granted else {
+                print("[VoiceSession] Microphone permission denied.")
+                return
             }
-            return
+
+            if !isConnected {
+                startSession()
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            beginCapture()
         }
-        beginCapture()
     }
 
     func stopListening() {

@@ -2,7 +2,7 @@ import Cocoa
 import CoreGraphics
 
 /// Listens for Right Option key press via CGEvent tap.
-/// Requires Accessibility permission (CGRequestListenEventAccess).
+/// Requires Accessibility permission.
 final class GlobalHotkeyManager {
     private let onActivate: () -> Void
     private var eventTap: CFMachPort?
@@ -13,17 +13,48 @@ final class GlobalHotkeyManager {
     }
 
     func start() {
-        // Request accessibility permission if needed
-        let trusted = CGRequestListenEventAccess()
-        if !trusted {
-            print("[Hotkey] Accessibility permission not granted. Waiting for user to grant it.")
-            // The system will show a prompt. We'll retry on next app launch.
+        // Check without prompting first
+        if AXIsProcessTrusted() {
+            installEventTap()
             return
         }
 
+        // Not trusted — prompt once, then poll until granted
+        let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue(): true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+
+        // Poll every 2 seconds until the user grants permission
+        pollForAccessibility()
+    }
+
+    func stop() {
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+        }
+        if let source = runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+        }
+        eventTap = nil
+        runLoopSource = nil
+    }
+
+    // MARK: - Private
+
+    private func pollForAccessibility() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self, self.eventTap == nil else { return }
+            if AXIsProcessTrusted() {
+                print("[Hotkey] Accessibility permission granted.")
+                self.installEventTap()
+            } else {
+                self.pollForAccessibility()
+            }
+        }
+    }
+
+    private func installEventTap() {
         let mask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue)
 
-        // The callback needs to be a C function pointer, so we use a static context
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
             guard let userInfo else { return Unmanaged.passRetained(event) }
             let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(userInfo).takeUnretainedValue()
@@ -40,7 +71,7 @@ final class GlobalHotkeyManager {
             callback: callback,
             userInfo: selfPtr
         ) else {
-            print("[Hotkey] Failed to create event tap. Check Accessibility permissions.")
+            print("[Hotkey] Failed to create event tap despite being trusted.")
             return
         }
 
@@ -52,17 +83,6 @@ final class GlobalHotkeyManager {
         print("[Hotkey] Event tap installed. Right Option key is active.")
     }
 
-    func stop() {
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-        }
-        if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
-        }
-        eventTap = nil
-        runLoopSource = nil
-    }
-
     private func handleEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         guard type == .flagsChanged else {
             return Unmanaged.passRetained(event)
@@ -72,7 +92,6 @@ final class GlobalHotkeyManager {
         let flags = event.flags
 
         // Right Option key: keycode 61, check that Option is pressed
-        // and that it's specifically the right option (no left option flag)
         if keyCode == 61 && flags.contains(.maskAlternate) {
             DispatchQueue.main.async { [weak self] in
                 self?.onActivate()
@@ -85,11 +104,4 @@ final class GlobalHotkeyManager {
     deinit {
         stop()
     }
-}
-
-/// Request accessibility permission.
-/// Returns true if already trusted, false if the user needs to grant permission.
-private func CGRequestListenEventAccess() -> Bool {
-    let options = [kAXTrustedCheckOptionPrompt.takeRetainedValue(): true] as CFDictionary
-    return AXIsProcessTrustedWithOptions(options)
 }
