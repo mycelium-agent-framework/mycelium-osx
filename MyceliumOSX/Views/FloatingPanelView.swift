@@ -36,9 +36,10 @@ struct FloatingPanelView: View {
                 .fill(appState.isConnected ? .green : .red)
                 .frame(width: 8, height: 8)
 
-            Text(appState.mountedRingName ?? "No Ring")
+            Text(appState.statusMessage.isEmpty ? (appState.mountedRingName ?? "No Ring") : appState.statusMessage)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
 
             Spacer()
 
@@ -122,7 +123,7 @@ struct FloatingPanelView: View {
 
         let spore = Spore(
             type: .note,
-            channel: appState.activeChannel?.name ?? "default",
+            channel: appState.activeChannel?.name ?? "general",
             content: content,
             originPop: appState.deviceId
         )

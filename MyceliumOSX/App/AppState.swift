@@ -22,6 +22,7 @@ final class AppState {
     // MARK: - Panel
 
     var isPanelVisible = false
+    var statusMessage: String = ""
 
     // MARK: - Device
 
@@ -153,7 +154,7 @@ final class AppState {
         transcriptStore = TranscriptStore(ringPath: path, deviceId: deviceId)
 
         channels = scanChannels(ringPath: path)
-        if let defaultChannel = channels.first(where: { $0.name == "default" }) ?? channels.first {
+        if let defaultChannel = channels.first(where: { $0.name == "general" }) ?? channels.first {
             switchChannel(to: defaultChannel)
         }
 
@@ -213,6 +214,10 @@ final class AppState {
         voiceSession.onToolCall = { [weak self] callId, name, args in
             self?.handleToolCall(callId: callId, name: name, args: args)
         }
+
+        voiceSession.onStatusMessage = { [weak self] message in
+            self?.statusMessage = message
+        }
     }
 
     private func appendTranscriptEntry(_ entry: TranscriptEntry) {
@@ -245,7 +250,7 @@ final class AppState {
 
         let spore = Spore(
             type: sporeType,
-            channel: activeChannel?.name ?? "default",
+            channel: activeChannel?.name ?? "general",
             content: content,
             originPop: deviceId
         )
@@ -271,7 +276,7 @@ final class AppState {
         let spore = Spore(
             type: .handoff,
             status: .done,
-            channel: activeChannel?.name ?? "default",
+            channel: activeChannel?.name ?? "general",
             content: "Session ended on macOS.",
             contextRecap: recap,
             originPop: deviceId

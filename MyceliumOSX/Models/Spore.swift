@@ -47,7 +47,7 @@ struct Spore: Codable, Identifiable, Sendable {
         status: SporeStatus = .open,
         parentId: String? = nil,
         blockedBy: [String] = [],
-        channel: String = "default",
+        channel: String = "general",
         tags: [String] = [],
         metadata: [String: AnyCodable] = [:],
         content: String,

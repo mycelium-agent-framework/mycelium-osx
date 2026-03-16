@@ -5,18 +5,21 @@ import Foundation
 /// Protocol:
 /// - Connect to wss://generativelanguage.googleapis.com/ws/...
 /// - Send `setup` message with system instruction and tools
+/// - Wait for `setupComplete` before sending any content
 /// - Send `realtimeInput` with base64 PCM audio chunks
 /// - Receive `serverContent` with text parts and audio responses
-/// - Handle `toolCall` for function calling
 @Observable
 final class GeminiLiveClient: @unchecked Sendable {
     private var webSocket: URLSessionWebSocketTask?
     private var session: URLSession?
+    private var setupContinuation: CheckedContinuation<Bool, Never>?
 
-    var isConnected = false
+    private(set) var isConnected = false
+    private(set) var isSetupComplete = false
+
     var onTextReceived: ((String, Bool) -> Void)?  // (text, isFinal)
     var onAudioReceived: ((Data) -> Void)?          // PCM audio data
-    var onToolCall: ((String, String, [String: Any]) -> Void)?  // (callId, functionName, args)
+    var onToolCall: ((String, String, [String: Any]) -> Void)?
     var onError: ((Error) -> Void)?
     var onDisconnect: (() -> Void)?
 
@@ -30,17 +33,23 @@ final class GeminiLiveClient: @unchecked Sendable {
 
     // MARK: - Connection
 
-    func connect(systemInstruction: String) {
+    /// Connect and wait for setupComplete. Returns true if setup succeeded.
+    func connect(systemInstruction: String) async -> Bool {
         let urlString = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=\(apiKey)"
 
         guard let url = URL(string: urlString) else {
             print("[GeminiLive] Invalid URL")
-            return
+            return false
         }
+
+        print("[GeminiLive] Connecting to \(model)...")
 
         session = URLSession(configuration: .default)
         webSocket = session?.webSocketTask(with: url)
         webSocket?.resume()
+
+        // Start receive loop before sending setup (to catch setupComplete)
+        receiveLoop()
 
         // Send setup message
         let setup: [String: Any] = [
@@ -66,21 +75,42 @@ final class GeminiLiveClient: @unchecked Sendable {
         ]
 
         send(json: setup)
-        isConnected = true
-        receiveLoop()
+
+        // Wait for setupComplete (with timeout)
+        let setupOk = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            self.setupContinuation = continuation
+
+            // Timeout after 10 seconds
+            DispatchQueue.global().asyncAfter(deadline: .now() + 10) { [weak self] in
+                self?.setupContinuation?.resume(returning: false)
+                self?.setupContinuation = nil
+            }
+        }
+
+        if setupOk {
+            isConnected = true
+            isSetupComplete = true
+            print("[GeminiLive] Connected and setup complete.")
+        } else {
+            print("[GeminiLive] Setup timed out or failed.")
+            disconnect()
+        }
+
+        return setupOk
     }
 
     func disconnect() {
         webSocket?.cancel(with: .normalClosure, reason: nil)
         webSocket = nil
         isConnected = false
+        isSetupComplete = false
         onDisconnect?()
     }
 
     // MARK: - Send Audio
 
-    /// Send a chunk of PCM audio (16-bit LE, 16kHz mono).
     func sendAudio(pcmData: Data) {
+        guard isSetupComplete else { return }
         let base64 = pcmData.base64EncodedString()
         let message: [String: Any] = [
             "realtimeInput": [
@@ -95,8 +125,11 @@ final class GeminiLiveClient: @unchecked Sendable {
         send(json: message)
     }
 
-    /// Send a text message (for text-only interaction or testing).
     func sendText(_ text: String) {
+        guard isSetupComplete else {
+            print("[GeminiLive] Cannot send text — setup not complete")
+            return
+        }
         let message: [String: Any] = [
             "clientContent": [
                 "turns": [
@@ -111,8 +144,8 @@ final class GeminiLiveClient: @unchecked Sendable {
         send(json: message)
     }
 
-    /// Send a tool response back to Gemini.
     func sendToolResponse(callId: String, result: [String: Any]) {
+        guard isSetupComplete else { return }
         let message: [String: Any] = [
             "toolResponse": [
                 "functionResponses": [
@@ -145,12 +178,12 @@ final class GeminiLiveClient: @unchecked Sendable {
                 @unknown default:
                     break
                 }
-                // Continue receiving
                 self.receiveLoop()
 
             case .failure(let error):
                 print("[GeminiLive] WebSocket error: \(error)")
                 self.isConnected = false
+                self.isSetupComplete = false
                 self.onError?(error)
             }
         }
@@ -161,7 +194,15 @@ final class GeminiLiveClient: @unchecked Sendable {
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return }
 
-        // Handle server content (text + audio responses)
+        // Handle setup complete
+        if json["setupComplete"] != nil {
+            print("[GeminiLive] Received setupComplete")
+            setupContinuation?.resume(returning: true)
+            setupContinuation = nil
+            return
+        }
+
+        // Handle server content
         if let serverContent = json["serverContent"] as? [String: Any] {
             handleServerContent(serverContent)
         }
@@ -177,11 +218,6 @@ final class GeminiLiveClient: @unchecked Sendable {
                 }
             }
         }
-
-        // Handle setup complete
-        if json["setupComplete"] != nil {
-            print("[GeminiLive] Setup complete, ready for conversation.")
-        }
     }
 
     private func handleServerContent(_ content: [String: Any]) {
@@ -192,12 +228,10 @@ final class GeminiLiveClient: @unchecked Sendable {
         let turnComplete = content["turnComplete"] as? Bool ?? false
 
         for part in parts {
-            // Text part
             if let text = part["text"] as? String {
                 onTextReceived?(text, turnComplete)
             }
 
-            // Audio part
             if let inlineData = part["inlineData"] as? [String: Any],
                let b64 = inlineData["data"] as? String,
                let audioData = Data(base64Encoded: b64) {
@@ -209,7 +243,6 @@ final class GeminiLiveClient: @unchecked Sendable {
     // MARK: - Tool Declarations
 
     private func buildToolDeclarations() -> [[String: Any]] {
-        // Phase 4 prep: tool declarations for Google Drive access
         return [
             [
                 "functionDeclarations": [
