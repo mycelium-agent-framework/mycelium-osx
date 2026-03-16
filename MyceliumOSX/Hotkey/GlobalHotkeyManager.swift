@@ -84,6 +84,15 @@ final class GlobalHotkeyManager {
     }
 
     private func handleEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        // Re-enable tap if macOS disabled it due to timeout
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let tap = eventTap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+                print("[Hotkey] Event tap re-enabled after system disable")
+            }
+            return Unmanaged.passRetained(event)
+        }
+
         guard type == .flagsChanged else {
             return Unmanaged.passRetained(event)
         }

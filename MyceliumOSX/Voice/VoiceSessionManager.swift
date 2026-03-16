@@ -62,7 +62,25 @@ final class VoiceSessionManager {
             Task { @MainActor [weak self] in self?.handleThinking(text, isFinal: isFinal) }
         }
         client.onUserTranscript = { [weak self] text in
-            Task { @MainActor [weak self] in self?.handleUserTranscript(text) }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                print("[VoiceSession] User transcript: \(trimmed)")
+                let entry = TranscriptEntry(role: .user, text: trimmed, originPop: "osx-desktop")
+                self.onTranscriptEntry?(entry)
+            }
+        }
+        client.onOutputTranscript = { [weak self] text in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                print("[VoiceSession] Vivian transcript: \(trimmed)")
+                let entry = TranscriptEntry(role: .model, text: trimmed, originPop: "osx-desktop")
+                self.onTranscriptEntry?(entry)
+                self.onStatusMessage?("Ready — hold mic to talk")
+            }
         }
         client.onAudioReceived = { [weak self] data in
             Task { @MainActor [weak self] in self?.handleAudio(data) }
@@ -184,37 +202,14 @@ final class VoiceSessionManager {
 
     // MARK: - Handlers
 
-    private func handleUserTranscript(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        print("[VoiceSession] User said: \(trimmed)")
-        let entry = TranscriptEntry(
-            role: .user,
-            text: trimmed,
-            isFinal: true,
-            originPop: "osx-desktop"
-        )
-        onTranscriptEntry?(entry)
-    }
-
+    // Text received from model (used in text-mode Live API, not audio mode)
     private func handleText(_ text: String, isFinal: Bool) {
+        // In audio mode, we use outputTranscript instead
+        // This handler is kept for text-mode fallback
         if isFinal {
             let fullText = partialBuffer + text
             partialBuffer = ""
             onPartialText?("")
-
-            let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                print("[VoiceSession] Model said: \(trimmed.prefix(80))")
-                let entry = TranscriptEntry(
-                    role: .model,
-                    text: trimmed,
-                    isFinal: true,
-                    originPop: "osx-desktop"
-                )
-                onTranscriptEntry?(entry)
-                onStatusMessage?("Ready — hold mic to talk")
-            }
         } else {
             partialBuffer += text
             onPartialText?(partialBuffer)
