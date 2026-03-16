@@ -21,10 +21,13 @@
 		2AC9BCEED597CB1396506ED6 /* RingManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0300A1CD49156E4DC38274B0 /* RingManagerTests.swift */; };
 		2CE57FBE885E09C89CEDC5A1 /* MockKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1525FCD05E20D52BDB27ACE3 /* MockKeychain.swift */; };
 		2E7F7634091EC1B6A30ABC0E /* TranscriptEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 616ED4BD3AE5A2751A3D4440 /* TranscriptEntry.swift */; };
+		34EB80AEC50AF8FBB182D09A /* LocalVoiceSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E1EE12B68BC9679CF75B3EE /* LocalVoiceSession.swift */; };
 		39E5BE29C04797BE299797C6 /* LocalTTS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A47356206DA57E43D82F0E3 /* LocalTTS.swift */; };
 		3CDDF8179F4898ED576E3C48 /* GlobalHotkeyManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 965B921DEEE9E217795A6FE6 /* GlobalHotkeyManagerTests.swift */; };
 		51DC18127B8203964B9E2B9B /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04F4A69569554B2CD72AA79D /* AppStateTests.swift */; };
 		5347A5C906129A9B7A085AB7 /* VoiceSessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0D6505B6259C21D6BD7499F /* VoiceSessionManager.swift */; };
+		5B09D5E85A9FFC5A7A4DCB54 /* LocalSTT.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DC6454318EF280513DCB545 /* LocalSTT.swift */; };
+		64E7F6169993DD1B8AAE4919 /* LocalSTTTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E5BDB68FEB9ACDA753FC725 /* LocalSTTTests.swift */; };
 		6F9516A20D709FE030E5A5D9 /* MockGeminiLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = B66AA58990F46E5E2847F0E2 /* MockGeminiLive.swift */; };
 		70BF9F91F9E16D318BF41D5E /* AudioPlaybackManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E18B0FD92B0C0BB949592DF9 /* AudioPlaybackManager.swift */; };
 		719869284A3FB55201FA6EAB /* MockFileSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC50A3A307396FCFD2B9E53E /* MockFileSystem.swift */; };
@@ -32,6 +35,7 @@
 		7A9ABA1B7C3C336EDDC0B993 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDDB5348EC71E9147FB33AE /* AppState.swift */; };
 		87939445A41AF4A0FEFBCD9E /* GlobalHotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9118A5EE58AF062C0CD77EAD /* GlobalHotkeyManager.swift */; };
 		9C1B005BA7B6A3976AFB4A97 /* RingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF05C3564B1B833A1BD95E49 /* RingManager.swift */; };
+		9FF501153DD50F73D0009270 /* LocalVoiceSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BF6E25991D81F57044D975E /* LocalVoiceSessionTests.swift */; };
 		A25784BF16E9804A29A6DF29 /* OllamaClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52E135D498E41F7346AC2018 /* OllamaClient.swift */; };
 		AA091F6D6022223A2DC9D811 /* GeminiTextClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33EA12B661B42874FEE05C62 /* GeminiTextClient.swift */; };
 		B024A2B1AA1A4019CB098D4E /* ChannelListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5521E96E28BA3976F64A590E /* ChannelListView.swift */; };
@@ -75,6 +79,7 @@
 		2206B7466B50A44FBC6A6C34 /* MockAudioCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAudioCapture.swift; sourceTree = "<group>"; };
 		33EA12B661B42874FEE05C62 /* GeminiTextClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiTextClient.swift; sourceTree = "<group>"; };
 		37798A312EC70F133BC1AA5C /* MyceliumOSXTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MyceliumOSXTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3E5BDB68FEB9ACDA753FC725 /* LocalSTTTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSTTTests.swift; sourceTree = "<group>"; };
 		3F62A49C6DEA295B3BE709DA /* GeminiLiveClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiLiveClientTests.swift; sourceTree = "<group>"; };
 		42B9BEA44B5ECE6E0FC4AFBE /* AudioCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureManager.swift; sourceTree = "<group>"; };
 		4A47356206DA57E43D82F0E3 /* LocalTTS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTTS.swift; sourceTree = "<group>"; };
@@ -82,11 +87,14 @@
 		5268A16A4285AB3C06EEFC6F /* Protocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocols.swift; sourceTree = "<group>"; };
 		52E135D498E41F7346AC2018 /* OllamaClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OllamaClient.swift; sourceTree = "<group>"; };
 		5521E96E28BA3976F64A590E /* ChannelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListView.swift; sourceTree = "<group>"; };
+		5BF6E25991D81F57044D975E /* LocalVoiceSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalVoiceSessionTests.swift; sourceTree = "<group>"; };
 		6164E8D838ED32FB91EAC84A /* TranscriptStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStoreTests.swift; sourceTree = "<group>"; };
 		616A162A47CEE3099C20F1E9 /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
 		616ED4BD3AE5A2751A3D4440 /* TranscriptEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptEntry.swift; sourceTree = "<group>"; };
 		63D5C955CDDE531FDC62CEB5 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		6771B64F87663375851FF8FE /* Spore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Spore.swift; sourceTree = "<group>"; };
+		6DC6454318EF280513DCB545 /* LocalSTT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalSTT.swift; sourceTree = "<group>"; };
+		6E1EE12B68BC9679CF75B3EE /* LocalVoiceSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalVoiceSession.swift; sourceTree = "<group>"; };
 		6EBB3D088F42477C696E5545 /* OllamaClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OllamaClientTests.swift; sourceTree = "<group>"; };
 		741FB0899FAA8427A1C23510 /* GeminiLiveClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiLiveClient.swift; sourceTree = "<group>"; };
 		79029EAAF6A81C7725FDEE71 /* GeminiTextClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiTextClientTests.swift; sourceTree = "<group>"; };
@@ -120,7 +128,9 @@
 				E18B0FD92B0C0BB949592DF9 /* AudioPlaybackManager.swift */,
 				741FB0899FAA8427A1C23510 /* GeminiLiveClient.swift */,
 				33EA12B661B42874FEE05C62 /* GeminiTextClient.swift */,
+				6DC6454318EF280513DCB545 /* LocalSTT.swift */,
 				4A47356206DA57E43D82F0E3 /* LocalTTS.swift */,
+				6E1EE12B68BC9679CF75B3EE /* LocalVoiceSession.swift */,
 				52E135D498E41F7346AC2018 /* OllamaClient.swift */,
 				B0D6505B6259C21D6BD7499F /* VoiceSessionManager.swift */,
 			);
@@ -188,7 +198,9 @@
 				79029EAAF6A81C7725FDEE71 /* GeminiTextClientTests.swift */,
 				965B921DEEE9E217795A6FE6 /* GlobalHotkeyManagerTests.swift */,
 				C9D522EE7AB2F10605C483C5 /* KeychainManagerTests.swift */,
+				3E5BDB68FEB9ACDA753FC725 /* LocalSTTTests.swift */,
 				CEE9158058F937B5646728EA /* LocalTTSTests.swift */,
+				5BF6E25991D81F57044D975E /* LocalVoiceSessionTests.swift */,
 				C65ADCB8547972985C388C41 /* ModelTests.swift */,
 				6EBB3D088F42477C696E5545 /* OllamaClientTests.swift */,
 				0300A1CD49156E4DC38274B0 /* RingManagerTests.swift */,
@@ -356,7 +368,9 @@
 				AA091F6D6022223A2DC9D811 /* GeminiTextClient.swift in Sources */,
 				87939445A41AF4A0FEFBCD9E /* GlobalHotkeyManager.swift in Sources */,
 				F1EE3B7EFE72519A167D8A87 /* KeychainManager.swift in Sources */,
+				5B09D5E85A9FFC5A7A4DCB54 /* LocalSTT.swift in Sources */,
 				39E5BE29C04797BE299797C6 /* LocalTTS.swift in Sources */,
+				34EB80AEC50AF8FBB182D09A /* LocalVoiceSession.swift in Sources */,
 				B853665CD28003641CEE6CFB /* Manifest.swift in Sources */,
 				003F565C720E508474D7A7C5 /* MyceliumApp.swift in Sources */,
 				A25784BF16E9804A29A6DF29 /* OllamaClient.swift in Sources */,
@@ -382,7 +396,9 @@
 				B0BA7A0E338CE444BFBD0803 /* GeminiTextClientTests.swift in Sources */,
 				3CDDF8179F4898ED576E3C48 /* GlobalHotkeyManagerTests.swift in Sources */,
 				16FB4F9664154B0CA8970864 /* KeychainManagerTests.swift in Sources */,
+				64E7F6169993DD1B8AAE4919 /* LocalSTTTests.swift in Sources */,
 				E669335A1B5DAB13A9565B76 /* LocalTTSTests.swift in Sources */,
+				9FF501153DD50F73D0009270 /* LocalVoiceSessionTests.swift in Sources */,
 				25D93DBD394EB545EBED58A3 /* MockAudioCapture.swift in Sources */,
 				E9CCC2D90AA3C6222FC42A92 /* MockAudioPlayback.swift in Sources */,
 				719869284A3FB55201FA6EAB /* MockFileSystem.swift in Sources */,

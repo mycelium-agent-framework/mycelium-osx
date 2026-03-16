@@ -239,9 +239,9 @@ final class AppStateTests: XCTestCase {
 
     // MARK: - Voice Mode
 
-    func testStartVoiceModeWithoutApiKey() {
+    func testStartVoiceModeWithoutBackend() {
         appState.startVoiceMode()
-        XCTAssertEqual(appState.statusMessage, "No API key configured")
+        XCTAssertEqual(appState.statusMessage, "No backend available for voice")
         XCTAssertEqual(appState.mode, .text)
     }
 

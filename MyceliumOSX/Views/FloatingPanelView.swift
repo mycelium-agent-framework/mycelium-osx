@@ -233,17 +233,21 @@ struct VoiceModeIndicator: View {
                 DragGesture(minimumDistance: 0)
                     .onChanged { _ in
                         if !appState.isRecording {
-                            appState.voiceSession.startRecording()
+                            appState.startPushToTalk()
                         }
                     }
                     .onEnded { _ in
-                        appState.voiceSession.stopRecording()
+                        appState.stopPushToTalk()
                     }
             )
 
             if appState.isSpeaking {
                 Button {
-                    appState.voiceSession.bargeIn()
+                    if appState.useLocalModel {
+                        appState.localVoiceSession?.interrupt()
+                    } else {
+                        appState.voiceSession.bargeIn()
+                    }
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "stop.fill")

@@ -92,11 +92,18 @@ final class AppState {
 
     // MARK: - Voice
 
-    let voiceSession: VoiceSessionManager
+    let voiceSession: VoiceSessionManager  // Gemini Live (cloud)
+    var localVoiceSession: LocalVoiceSession?  // Ollama + STT + TTS (local)
 
-    var isRecording: Bool { voiceSession.isRecording }
-    var isConnected: Bool { mode == .voice && voiceSession.isConnected }
-    var isSpeaking: Bool { voiceSession.isSpeaking }
+    var isRecording: Bool {
+        if useLocalModel { return localVoiceSession?.isRecording ?? false }
+        return voiceSession.isRecording
+    }
+    var isConnected: Bool { mode == .voice }
+    var isSpeaking: Bool {
+        if useLocalModel { return localVoiceSession?.isSpeaking ?? false }
+        return voiceSession.isSpeaking
+    }
 
     // MARK: - Text / Local LLM
 
@@ -368,23 +375,63 @@ final class AppState {
     // MARK: - Voice Mode
 
     func startVoiceMode() {
-        guard currentApiKey != nil else {
-            statusMessage = "No API key configured"
-            return
-        }
         mode = .voice
-        Task { _ = await voiceSession.startSession() }
+
+        if useLocalModel, let ollama = ollamaClient {
+            // Local voice: STT → Ollama → TTS
+            if localVoiceSession == nil {
+                let session = LocalVoiceSession(ollamaClient: ollama)
+                session.onTranscriptEntry = { [weak self] entry in
+                    self?.appendTranscriptEntry(entry)
+                }
+                session.onStatusMessage = { [weak self] msg in
+                    self?.statusMessage = msg
+                }
+                localVoiceSession = session
+            }
+            statusMessage = "Voice ready (local)"
+        } else if currentApiKey != nil {
+            // Cloud voice: Gemini Live
+            Task { _ = await voiceSession.startSession() }
+        } else {
+            statusMessage = "No backend available for voice"
+            mode = .text
+        }
     }
 
     func stopVoiceMode() {
-        voiceSession.stopRecording()
-        voiceSession.endSession()
+        if useLocalModel {
+            localVoiceSession?.stopRecording()
+            localVoiceSession?.interrupt()
+        } else {
+            voiceSession.stopRecording()
+            voiceSession.endSession()
+        }
         mode = .text
-        statusMessage = mountedRingName ?? ""
+        statusMessage = useLocalModel ? "Ready (local)" : (mountedRingName ?? "")
     }
 
     func toggleVoiceMode() {
         if mode == .voice { stopVoiceMode() } else { startVoiceMode() }
+    }
+
+    /// Push-to-talk: start recording (called by hotkey press).
+    func startPushToTalk() {
+        if mode != .voice { startVoiceMode() }
+        if useLocalModel {
+            localVoiceSession?.startRecording()
+        } else {
+            voiceSession.startRecording()
+        }
+    }
+
+    /// Push-to-talk: stop recording (called by hotkey release).
+    func stopPushToTalk() {
+        if useLocalModel {
+            localVoiceSession?.stopRecording()
+        } else {
+            voiceSession.stopRecording()
+        }
     }
 
     // MARK: - Session End

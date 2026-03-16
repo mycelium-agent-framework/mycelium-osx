@@ -102,16 +102,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
         }
 
-        // Enter voice mode and start recording.
-        // startRecording() handles connecting if needed — no race condition.
-        appState.mode = .voice
-        appState.voiceSession.startRecording()
+        appState.startPushToTalk()
     }
 
     @MainActor
     private func handleHotkeyRelease() {
-        // Stop recording — Vivian processes and responds
-        appState.voiceSession.stopRecording()
+        appState.stopPushToTalk()
     }
 
     private func simulateMediaPlayPause() {
