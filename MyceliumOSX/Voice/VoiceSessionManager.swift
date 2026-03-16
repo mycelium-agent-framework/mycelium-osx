@@ -67,6 +67,20 @@ final class VoiceSessionManager {
             }
         }
 
+        client.onUserTranscript = { [weak self] text in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                print("[VoiceSession] User transcript: \(text)")
+                let entry = TranscriptEntry(
+                    role: .user,
+                    text: text.trimmingCharacters(in: .whitespacesAndNewlines),
+                    isFinal: true,
+                    originPop: "osx-desktop"
+                )
+                self.onTranscriptEntry?(entry)
+            }
+        }
+
         client.onAudioReceived = { [weak self] data in
             Task { @MainActor [weak self] in
                 self?.handleAudio(data)
@@ -165,17 +179,31 @@ final class VoiceSessionManager {
         }
     }
 
+    /// Minimum audio level to send to Gemini (noise gate).
+    /// Below this threshold, silence is assumed and nothing is sent.
+    private let noiseGateThreshold: Float = 0.02
+
+    /// Cooldown after Vivian finishes speaking before mic resumes sending.
+    private var postSpeechCooldown = false
+
     private func beginCapture() {
         var chunkCount = 0
         capture.onAudioChunk = { [weak self] data in
             guard let self else { return }
-            // Half-duplex: don't send mic audio while Vivian is speaking
-            // (prevents echo loop where she hears herself and responds to it)
+
+            // Don't send while Vivian is speaking (echo prevention)
             guard !self.isSpeaking else { return }
+
+            // Don't send during post-speech cooldown (prevents noise triggering new response)
+            guard !self.postSpeechCooldown else { return }
+
+            // Noise gate: only send when audio level exceeds threshold
+            guard self.capture.audioLevel > self.noiseGateThreshold else { return }
+
             self.gemini?.sendAudio(pcmData: data)
             chunkCount += 1
             if chunkCount == 1 {
-                print("[VoiceSession] First audio chunk sent (\(data.count) bytes)")
+                print("[VoiceSession] First audio chunk sent (\(data.count) bytes), level: \(self.capture.audioLevel)")
             }
         }
 
@@ -183,7 +211,7 @@ final class VoiceSessionManager {
             try capture.startCapture()
             isListening = true
             onStatusMessage?("Voice active — speak now")
-            print("[VoiceSession] Mic capture started, streaming to Gemini")
+            print("[VoiceSession] Mic capture started with noise gate at \(noiseGateThreshold)")
         } catch {
             print("[VoiceSession] Failed to start capture: \(error)")
             onStatusMessage?("Mic error: \(error.localizedDescription)")
@@ -227,6 +255,7 @@ final class VoiceSessionManager {
     }
 
     private func handleText(_ text: String, isFinal: Bool) {
+        print("[VoiceSession] Text received (final=\(isFinal)): \(text.prefix(80))")
         if isFinal {
             let fullText = partialBuffer + text
             partialBuffer = ""
@@ -240,6 +269,7 @@ final class VoiceSessionManager {
                     originPop: "osx-desktop"
                 )
                 onTranscriptEntry?(entry)
+                print("[VoiceSession] Transcript entry added: \(fullText.prefix(80))")
             }
         } else {
             partialBuffer += text
@@ -251,15 +281,22 @@ final class VoiceSessionManager {
 
     private func handleAudio(_ data: Data) {
         isSpeaking = true
+        postSpeechCooldown = true
         playback.enqueue(pcmData: data)
 
         // Reset the "done speaking" timer on each audio chunk.
-        // Only mark as not speaking after 500ms with no new audio.
         speakingTimer?.cancel()
         speakingTimer = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             self.isSpeaking = false
+
+            // Extra cooldown: wait 1.5s after speech ends before sending mic audio again.
+            // This prevents ambient noise from immediately triggering a new response.
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            self.postSpeechCooldown = false
+            print("[VoiceSession] Post-speech cooldown ended, mic active")
         }
     }
 

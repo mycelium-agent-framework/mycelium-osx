@@ -19,6 +19,7 @@ final class GeminiLiveClient: @unchecked Sendable {
 
     var onTextReceived: ((String, Bool) -> Void)?      // (text, isFinal)
     var onThinkingReceived: ((String, Bool) -> Void)?  // (text, isFinal) — thinking blocks
+    var onUserTranscript: ((String) -> Void)?           // What Gemini heard the user say
     var onAudioReceived: ((Data) -> Void)?              // PCM audio data
     var onToolCall: ((String, String, [String: Any]) -> Void)?
     var onError: ((Error) -> Void)?
@@ -208,6 +209,12 @@ final class GeminiLiveClient: @unchecked Sendable {
 
         // Handle server content
         if let serverContent = json["serverContent"] as? [String: Any] {
+            // Log keys for debugging
+            let keys = serverContent.keys.sorted().joined(separator: ", ")
+            let hasText = (serverContent["modelTurn"] as? [String: Any])?["parts"] != nil
+            if hasText || serverContent["turnComplete"] != nil || serverContent["inputTranscript"] != nil {
+                print("[GeminiLive] serverContent keys: [\(keys)]")
+            }
             handleServerContent(serverContent)
         }
 
@@ -225,28 +232,40 @@ final class GeminiLiveClient: @unchecked Sendable {
     }
 
     private func handleServerContent(_ content: [String: Any]) {
-        guard let modelTurn = content["modelTurn"] as? [String: Any],
-              let parts = modelTurn["parts"] as? [[String: Any]]
-        else { return }
-
         let turnComplete = content["turnComplete"] as? Bool ?? false
 
-        for part in parts {
-            let isThought = part["thought"] as? Bool ?? false
+        // Process model turn parts if present
+        if let modelTurn = content["modelTurn"] as? [String: Any],
+           let parts = modelTurn["parts"] as? [[String: Any]] {
+            for part in parts {
+                let isThought = part["thought"] as? Bool ?? false
 
-            if let text = part["text"] as? String {
-                if isThought {
-                    onThinkingReceived?(text, turnComplete)
-                } else {
-                    onTextReceived?(text, turnComplete)
+                if let text = part["text"] as? String {
+                    if isThought {
+                        onThinkingReceived?(text, turnComplete)
+                    } else {
+                        onTextReceived?(text, false)  // not final until turnComplete
+                    }
+                }
+
+                if let inlineData = part["inlineData"] as? [String: Any],
+                   let b64 = inlineData["data"] as? String,
+                   let audioData = Data(base64Encoded: b64) {
+                    onAudioReceived?(audioData)
                 }
             }
+        }
 
-            if let inlineData = part["inlineData"] as? [String: Any],
-               let b64 = inlineData["data"] as? String,
-               let audioData = Data(base64Encoded: b64) {
-                onAudioReceived?(audioData)
-            }
+        // Handle input transcription (what Gemini heard the user say)
+        if let inputTranscript = content["inputTranscript"] as? String, !inputTranscript.isEmpty {
+            print("[GeminiLive] User said: \(inputTranscript)")
+            // Fire as a user transcript entry via a separate callback
+            onUserTranscript?(inputTranscript)
+        }
+
+        // Signal turn complete separately
+        if turnComplete {
+            onTextReceived?("", true)
         }
     }
 
