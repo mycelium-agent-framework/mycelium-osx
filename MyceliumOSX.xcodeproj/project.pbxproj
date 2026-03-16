@@ -19,6 +19,7 @@
 		7A9ABA1B7C3C336EDDC0B993 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDDB5348EC71E9147FB33AE /* AppState.swift */; };
 		87939445A41AF4A0FEFBCD9E /* GlobalHotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9118A5EE58AF062C0CD77EAD /* GlobalHotkeyManager.swift */; };
 		9C1B005BA7B6A3976AFB4A97 /* RingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF05C3564B1B833A1BD95E49 /* RingManager.swift */; };
+		AA091F6D6022223A2DC9D811 /* GeminiTextClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33EA12B661B42874FEE05C62 /* GeminiTextClient.swift */; };
 		B024A2B1AA1A4019CB098D4E /* ChannelListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5521E96E28BA3976F64A590E /* ChannelListView.swift */; };
 		B853665CD28003641CEE6CFB /* Manifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 074D3EE231DF190975F4567C /* Manifest.swift */; };
 		BE50052C07F6D6DA80896F0C /* FloatingPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9C0141B35B32E9F05605250 /* FloatingPanelView.swift */; };
@@ -48,6 +49,7 @@
 		0B322EE3FC3D04B1B3FB6B43 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		0ED34F9531E5E2177A2E8EAA /* SporeStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SporeStore.swift; sourceTree = "<group>"; };
 		18B5A74E3B9E10E772159E4E /* SporeStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SporeStoreTests.swift; sourceTree = "<group>"; };
+		33EA12B661B42874FEE05C62 /* GeminiTextClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiTextClient.swift; sourceTree = "<group>"; };
 		37798A312EC70F133BC1AA5C /* MyceliumOSXTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MyceliumOSXTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		42B9BEA44B5ECE6E0FC4AFBE /* AudioCaptureManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureManager.swift; sourceTree = "<group>"; };
 		4FDDB5348EC71E9147FB33AE /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -79,6 +81,7 @@
 				42B9BEA44B5ECE6E0FC4AFBE /* AudioCaptureManager.swift */,
 				E18B0FD92B0C0BB949592DF9 /* AudioPlaybackManager.swift */,
 				741FB0899FAA8427A1C23510 /* GeminiLiveClient.swift */,
+				33EA12B661B42874FEE05C62 /* GeminiTextClient.swift */,
 				B0D6505B6259C21D6BD7499F /* VoiceSessionManager.swift */,
 			);
 			path = Voice;
@@ -277,6 +280,7 @@
 				21DACA1D6582F31562B4B908 /* FloatingPanel.swift in Sources */,
 				BE50052C07F6D6DA80896F0C /* FloatingPanelView.swift in Sources */,
 				071E465FC36EA124BFCC24D1 /* GeminiLiveClient.swift in Sources */,
+				AA091F6D6022223A2DC9D811 /* GeminiTextClient.swift in Sources */,
 				87939445A41AF4A0FEFBCD9E /* GlobalHotkeyManager.swift in Sources */,
 				F1EE3B7EFE72519A167D8A87 /* KeychainManager.swift in Sources */,
 				B853665CD28003641CEE6CFB /* Manifest.swift in Sources */,

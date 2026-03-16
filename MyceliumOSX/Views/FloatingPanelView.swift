@@ -5,18 +5,13 @@ struct FloatingPanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
             headerBar
-
             Divider()
 
-            // Main content
             HSplitView {
-                // Channel sidebar
                 ChannelListView()
                     .frame(minWidth: 100, maxWidth: 140)
 
-                // Transcript area
                 VStack(spacing: 0) {
                     TranscriptView()
                     Divider()
@@ -33,26 +28,38 @@ struct FloatingPanelView: View {
     private var headerBar: some View {
         HStack {
             Circle()
-                .fill(appState.isConnected ? .green : .red)
+                .fill(appState.mode == .voice && appState.isConnected ? .green :
+                      appState.mountedRingName != nil ? .yellow : .red)
                 .frame(width: 8, height: 8)
 
-            Text(appState.statusMessage.isEmpty ? (appState.mountedRingName ?? "No Ring") : appState.statusMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            // Ring switcher dropdown
+            RingSwitcher()
+
+            if !appState.statusMessage.isEmpty {
+                Text(appState.statusMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             Spacer()
 
-            if appState.isListening {
-                Image(systemName: "mic.fill")
-                    .foregroundStyle(.red)
-                    .symbolEffect(.pulse)
+            if appState.isProcessing {
+                ProgressView()
+                    .controlSize(.small)
             }
 
-            if appState.isSpeaking {
-                Image(systemName: "speaker.wave.2.fill")
-                    .foregroundStyle(.blue)
-                    .symbolEffect(.variableColor)
+            if appState.mode == .voice {
+                if appState.isListening {
+                    Image(systemName: "mic.fill")
+                        .foregroundStyle(.red)
+                        .symbolEffect(.pulse)
+                }
+                if appState.isSpeaking {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .foregroundStyle(.blue)
+                        .symbolEffect(.variableColor)
+                }
             }
 
             Button {
@@ -71,32 +78,19 @@ struct FloatingPanelView: View {
 
     private var inputBar: some View {
         HStack(spacing: 8) {
-            // Mic toggle
+            // Voice mode toggle
             Button {
-                appState.voiceSession.toggleListening()
+                appState.toggleVoiceMode()
             } label: {
-                Image(systemName: appState.isListening ? "mic.fill" : "mic.slash.fill")
+                Image(systemName: appState.mode == .voice ? "waveform.circle.fill" : "waveform.circle")
                     .font(.title3)
-                    .foregroundStyle(appState.isListening ? .red : .secondary)
+                    .foregroundStyle(appState.mode == .voice ? .green : .secondary)
             }
             .buttonStyle(.plain)
-            .help(appState.isListening ? "Stop listening" : "Start listening")
+            .help(appState.mode == .voice ? "Switch to text mode" : "Switch to voice mode")
 
-            // Text input (fallback when mic is off)
-            if !appState.isListening {
-                TextInputField()
-            } else {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(.red)
-                        .frame(width: 6, height: 6)
-                        .opacity(appState.isListening ? 1 : 0)
-                    Text("Listening...")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
+            // Text input (always available)
+            TextInputField()
 
             // Remember button
             Button {
@@ -131,6 +125,45 @@ struct FloatingPanelView: View {
     }
 }
 
+struct RingSwitcher: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        Menu {
+            if let manifest = appState.manifest {
+                let allowedRings = manifest.pops
+                    .first(where: { $0.deviceId == appState.deviceId })?
+                    .allowedRings ?? []
+
+                ForEach(manifest.rings.filter({ allowedRings.contains($0.name) }), id: \.name) { ring in
+                    Button {
+                        appState.switchToRing(named: ring.name)
+                    } label: {
+                        HStack {
+                            Text(ring.name)
+                            if ring.name == appState.mountedRingName {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "circle.hexagonpath")
+                    .font(.caption2)
+                Text(appState.mountedRingName ?? "No Ring")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8))
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+}
+
 struct TextInputField: View {
     @Environment(AppState.self) private var appState
     @State private var inputText = ""
@@ -138,8 +171,9 @@ struct TextInputField: View {
     var body: some View {
         TextField("Type a message...", text: $inputText)
             .textFieldStyle(.roundedBorder)
+            .disabled(appState.isProcessing)
             .onSubmit {
-                guard !inputText.isEmpty else { return }
+                guard !inputText.isEmpty, !appState.isProcessing else { return }
                 appState.sendTextMessage(inputText)
                 inputText = ""
             }

@@ -8,20 +8,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyManager: GlobalHotkeyManager?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Preload all Keychain keys into memory (one prompt instead of many)
+        KeychainManager.preloadAll()
+
         setupFloatingPanel()
         setupHotkey()
 
         if appState.isConfigured {
             loadConfiguration()
         } else {
-            // First launch — show settings
             SettingsWindowController.shared.show(appState: appState)
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         hotkeyManager?.stop()
-        appState.endVoiceSession()
+        appState.endSession()
     }
 
     // MARK: - Floating Panel
@@ -80,19 +82,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func handleHotkeyActivation() {
         if appState.isPanelVisible {
-            // Dismiss panel and stop listening
             appState.isPanelVisible = false
-            appState.isListening = false
+            if appState.mode == .voice {
+                appState.stopVoiceMode()
+            }
             return
         }
 
-        // Pause media
         simulateMediaPlayPause()
-
-        // Show panel and start listening
         appState.isPanelVisible = true
         NSApp.activate(ignoringOtherApps: true)
-        appState.isListening = true
     }
 
     private func simulateMediaPlayPause() {

@@ -1,6 +1,11 @@
 import Foundation
 import SwiftUI
 
+enum InteractionMode: String {
+    case text    // Default: REST API, type messages
+    case voice   // Explicit: WebSocket Live API, mic + audio playback
+}
+
 @MainActor
 @Observable
 final class AppState {
@@ -18,30 +23,31 @@ final class AppState {
 
     var transcript: [TranscriptEntry] = []
     var partialText: String = ""
-
-    // MARK: - Panel
-
-    var isPanelVisible = false
     var statusMessage: String = ""
+    var isProcessing = false
+
+    // MARK: - Mode
+
+    var mode: InteractionMode = .text
+    var isPanelVisible = false
 
     // MARK: - Device
 
     let deviceId = "osx-desktop"
 
-    // MARK: - Voice
+    // MARK: - Voice (only used in voice mode)
 
     let voiceSession = VoiceSessionManager()
 
-    var isListening: Bool {
-        get { voiceSession.isListening }
-        set {
-            if newValue { voiceSession.startListening() }
-            else { voiceSession.stopListening() }
-        }
-    }
-
-    var isConnected: Bool { voiceSession.isConnected }
+    var isListening: Bool { voiceSession.isListening }
+    var isConnected: Bool { mode == .voice && voiceSession.isConnected }
     var isSpeaking: Bool { voiceSession.isSpeaking }
+
+    // MARK: - Text (default mode)
+
+    private var textClient: GeminiTextClient?
+    private var currentApiKey: String?
+    private var currentSystemInstruction: String = ""
 
     // MARK: - Managers
 
@@ -51,21 +57,17 @@ final class AppState {
 
     // MARK: - Initialization
 
-    /// Whether we have a valid configuration (ring0 path set).
     var isConfigured: Bool {
-        let hasPath = !(UserDefaults.standard.string(forKey: "ring0Path") ?? "").isEmpty
-        return hasPath
+        !(UserDefaults.standard.string(forKey: "ring0Path") ?? "").isEmpty
     }
 
     init() {
         setupVoiceCallbacks()
     }
 
-    /// Reload everything from UserDefaults (called after Settings save).
     func reloadConfiguration() {
         let defaults = UserDefaults.standard
 
-        // Load Ring 0
         guard let pathString = defaults.string(forKey: "ring0Path"),
               !pathString.isEmpty else { return }
 
@@ -73,17 +75,14 @@ final class AppState {
         let ring0URL = URL(fileURLWithPath: expandedPath)
         bootstrap(ring0Path: ring0URL)
 
-        // Mount first allowed ring using user-configured path from Settings
+        // Mount first allowed ring using user-configured path
         if let manifest = manifest,
            let pop = manifest.pops.first(where: { $0.deviceId == deviceId }),
            let firstRingName = pop.allowedRings.first {
-
             let userPath = defaults.string(forKey: "ringPath.\(firstRingName)") ?? ""
             if !userPath.isEmpty, FileManager.default.fileExists(atPath: userPath) {
-                print("[AppState] Mounting ring '\(firstRingName)' from \(userPath)")
                 mountRing(path: URL(fileURLWithPath: userPath), name: firstRingName)
             } else {
-                print("[AppState] Ring '\(firstRingName)' path not configured or doesn't exist: '\(userPath)'")
                 statusMessage = "Set path for '\(firstRingName)' in Settings"
             }
         }
@@ -99,49 +98,13 @@ final class AppState {
         }
     }
 
-    /// Resolve the API key for the currently mounted ring from Keychain
-    /// and configure the voice session.
-    func configureVoiceForCurrentRing() {
-        guard let ringName = mountedRingName,
-              let manifest = manifest,
-              let ring = manifest.rings.first(where: { $0.name == ringName }),
-              let backend = ring.backend
-        else {
-            print("[AppState] No backend config for mounted ring.")
-            return
-        }
-
-        guard let apiKey = KeychainManager.get(ref: backend.apiKeyRef) else {
-            print("[AppState] No API key in Keychain for ref '\(backend.apiKeyRef)'. Open Settings to add one.")
-            return
-        }
-
-        // Build system instruction from SOUL.md + ring SOUL.md + recent context
-        var instruction = soulContent
-
-        if let ringPath = mountedRingPath, let rm = ringManager {
-            if let ringSoul = rm.loadSOUL(ringPath: ringPath) {
-                instruction += "\n\n---\n\n" + ringSoul
-            }
-        }
-
-        if let store = sporeStore {
-            let handoffs = store.loadAll().filter { $0.type == .handoff }
-            if let lastHandoff = handoffs.last, let recap = lastHandoff.contextRecap {
-                instruction += "\n\n---\nPrevious session context:\n" + recap
-            }
-        }
-
-        voiceSession.configure(apiKey: apiKey, systemInstruction: instruction)
-        print("[AppState] Voice configured for ring '\(ringName)' via backend '\(backend.apiKeyRef)' (\(backend.provider)/\(backend.model))")
-    }
-
     // MARK: - Ring & Channel
 
     func mountRing(path: URL, name: String) {
-        // End current voice session (different ring = different backend)
-        if mountedRingName != nil {
+        // End any active voice session (different ring = different backend)
+        if mode == .voice {
             voiceSession.endSession()
+            mode = .text
         }
 
         if let current = mountedRingPath {
@@ -154,12 +117,24 @@ final class AppState {
         transcriptStore = TranscriptStore(ringPath: path, deviceId: deviceId)
 
         channels = scanChannels(ringPath: path)
-        if let defaultChannel = channels.first(where: { $0.name == "general" }) ?? channels.first {
-            switchChannel(to: defaultChannel)
+        if let generalChannel = channels.first(where: { $0.name == "general" }) ?? channels.first {
+            switchChannel(to: generalChannel)
         }
 
-        // Configure voice for the new ring's backend
-        configureVoiceForCurrentRing()
+        // Resolve API key and build system instruction for this ring
+        configureBackendForCurrentRing()
+        statusMessage = "Ring: \(name)"
+    }
+
+    /// Switch to a different ring by name. Reads path from UserDefaults.
+    func switchToRing(named name: String) {
+        guard name != mountedRingName else { return }
+        let userPath = UserDefaults.standard.string(forKey: "ringPath.\(name)") ?? ""
+        guard !userPath.isEmpty, FileManager.default.fileExists(atPath: userPath) else {
+            statusMessage = "Path for '\(name)' not set. Open Settings."
+            return
+        }
+        mountRing(path: URL(fileURLWithPath: userPath), name: name)
     }
 
     func switchChannel(to channel: Channel) {
@@ -167,6 +142,8 @@ final class AppState {
         if let store = transcriptStore {
             transcript = store.loadRecentEntries(channel: channel.name, limit: 50)
         }
+        // Clear text client history on channel switch
+        Task { await textClient?.clearHistory() }
     }
 
     func createChannel(name: String) {
@@ -178,22 +155,131 @@ final class AppState {
         channels = scanChannels(ringPath: ringPath)
     }
 
-    // MARK: - Text Input
+    // MARK: - Backend Configuration
+
+    private func configureBackendForCurrentRing() {
+        guard let ringName = mountedRingName,
+              let manifest = manifest,
+              let ring = manifest.rings.first(where: { $0.name == ringName }),
+              let backend = ring.backend
+        else {
+            statusMessage = "No backend config for ring"
+            return
+        }
+
+        guard let apiKey = KeychainManager.get(ref: backend.apiKeyRef) else {
+            statusMessage = "No API key for '\(backend.apiKeyRef)'. Open Settings."
+            return
+        }
+
+        // Build system instruction
+        var instruction = soulContent
+        if let ringPath = mountedRingPath, let rm = ringManager {
+            if let ringSoul = rm.loadSOUL(ringPath: ringPath) {
+                instruction += "\n\n---\n\n" + ringSoul
+            }
+        }
+        if let store = sporeStore {
+            let handoffs = store.loadAll().filter { $0.type == .handoff }
+            if let lastHandoff = handoffs.last, let recap = lastHandoff.contextRecap {
+                instruction += "\n\n---\nPrevious session context:\n" + recap
+            }
+        }
+
+        currentApiKey = apiKey
+        currentSystemInstruction = instruction
+
+        // Create text client (default mode)
+        textClient = GeminiTextClient(apiKey: apiKey, systemInstruction: instruction)
+
+        // Pre-configure voice session (used only when user switches to voice mode)
+        voiceSession.configure(apiKey: apiKey, systemInstruction: instruction)
+
+        print("[AppState] Backend configured for '\(ringName)' via '\(backend.apiKeyRef)'")
+    }
+
+    // MARK: - Text Input (default mode)
 
     func sendTextMessage(_ text: String) {
-        let entry = TranscriptEntry(
-            role: .user,
-            text: text,
-            originPop: deviceId
-        )
-        appendTranscriptEntry(entry)
-        voiceSession.sendText(text)
+        guard textClient != nil else {
+            statusMessage = "Not configured. Open Settings."
+            return
+        }
+
+        // Add user entry to transcript
+        let userEntry = TranscriptEntry(role: .user, text: text, originPop: deviceId)
+        appendTranscriptEntry(userEntry)
+
+        if mode == .voice {
+            // In voice mode, send via WebSocket
+            voiceSession.sendText(text)
+        } else {
+            // In text mode, send via REST
+            isProcessing = true
+            statusMessage = "Thinking..."
+
+            Task {
+                do {
+                    let response = try await textClient!.send(text)
+
+                    // Handle tool calls
+                    for tc in response.toolCalls {
+                        handleToolCall(callId: tc.id, name: tc.name, args: tc.args)
+                    }
+
+                    // Add model response to transcript
+                    if !response.text.isEmpty {
+                        let modelEntry = TranscriptEntry(
+                            role: .model,
+                            text: response.text.trimmingCharacters(in: .whitespacesAndNewlines),
+                            originPop: deviceId
+                        )
+                        appendTranscriptEntry(modelEntry)
+                    }
+
+                    statusMessage = mountedRingName ?? ""
+                } catch {
+                    statusMessage = "Error: \(error.localizedDescription)"
+                    print("[AppState] Text send error: \(error)")
+                }
+                isProcessing = false
+            }
+        }
+    }
+
+    // MARK: - Voice Mode
+
+    func startVoiceMode() {
+        guard currentApiKey != nil else {
+            statusMessage = "No API key configured"
+            return
+        }
+        mode = .voice
+        voiceSession.startListening()
+        statusMessage = "Voice mode"
+    }
+
+    func stopVoiceMode() {
+        voiceSession.stopListening()
+        voiceSession.endSession()
+        mode = .text
+        statusMessage = mountedRingName ?? ""
+    }
+
+    func toggleVoiceMode() {
+        if mode == .voice {
+            stopVoiceMode()
+        } else {
+            startVoiceMode()
+        }
     }
 
     // MARK: - Session End
 
-    func endVoiceSession() {
-        voiceSession.endSession()
+    func endSession() {
+        if mode == .voice {
+            voiceSession.endSession()
+        }
         generateHandoffSpore()
         if let ringPath = mountedRingPath {
             commitAndPersist(path: ringPath, message: "Session ended")
@@ -206,15 +292,12 @@ final class AppState {
         voiceSession.onTranscriptEntry = { [weak self] entry in
             self?.appendTranscriptEntry(entry)
         }
-
         voiceSession.onPartialText = { [weak self] text in
             self?.partialText = text
         }
-
         voiceSession.onToolCall = { [weak self] callId, name, args in
             self?.handleToolCall(callId: callId, name: name, args: args)
         }
-
         voiceSession.onStatusMessage = { [weak self] message in
             self?.statusMessage = message
         }
@@ -232,54 +315,39 @@ final class AppState {
     private func handleToolCall(callId: String, name: String, args: [String: Any]) {
         switch name {
         case "remember_this":
-            handleRememberThis(callId: callId, args: args)
+            guard let content = args["content"] as? String,
+                  let typeStr = args["spore_type"] as? String,
+                  let sporeType = SporeType(rawValue: typeStr)
+            else { return }
+
+            let spore = Spore(
+                type: sporeType,
+                channel: activeChannel?.name ?? "general",
+                content: content,
+                originPop: deviceId
+            )
+            sporeStore?.append(spore: spore)
+
+            if mode == .voice {
+                voiceSession.sendToolResponse(callId: callId, result: [
+                    "status": "saved", "spore_id": spore.id, "type": typeStr
+                ])
+            }
         default:
-            print("[AppState] Unknown tool call: \(name)")
-            voiceSession.sendToolResponse(callId: callId, result: ["error": "Unknown tool"])
+            print("[AppState] Unknown tool: \(name)")
         }
-    }
-
-    private func handleRememberThis(callId: String, args: [String: Any]) {
-        guard let content = args["content"] as? String,
-              let typeStr = args["spore_type"] as? String,
-              let sporeType = SporeType(rawValue: typeStr)
-        else {
-            voiceSession.sendToolResponse(callId: callId, result: ["error": "Invalid arguments"])
-            return
-        }
-
-        let spore = Spore(
-            type: sporeType,
-            channel: activeChannel?.name ?? "general",
-            content: content,
-            originPop: deviceId
-        )
-        sporeStore?.append(spore: spore)
-
-        voiceSession.sendToolResponse(callId: callId, result: [
-            "status": "saved",
-            "spore_id": spore.id,
-            "type": typeStr,
-        ])
-
-        print("[AppState] Saved spore via tool call: \(sporeType.rawValue) — \(content.prefix(60))")
     }
 
     // MARK: - Handoff
 
     private func generateHandoffSpore() {
         guard let store = sporeStore, !transcript.isEmpty else { return }
-
-        let recentTopics = transcript.suffix(10).map(\.text).joined(separator: " ")
-        let recap = String(recentTopics.prefix(500))
-
+        let recap = String(transcript.suffix(10).map(\.text).joined(separator: " ").prefix(500))
         let spore = Spore(
-            type: .handoff,
-            status: .done,
+            type: .handoff, status: .done,
             channel: activeChannel?.name ?? "general",
             content: "Session ended on macOS.",
-            contextRecap: recap,
-            originPop: deviceId
+            contextRecap: recap, originPop: deviceId
         )
         store.append(spore: spore)
     }
@@ -289,8 +357,7 @@ final class AppState {
     private func scanChannels(ringPath: URL) -> [Channel] {
         let channelsDir = ringPath.appendingPathComponent("channels")
         guard let contents = try? FileManager.default.contentsOfDirectory(
-            at: channelsDir,
-            includingPropertiesForKeys: [.isDirectoryKey],
+            at: channelsDir, includingPropertiesForKeys: [.isDirectoryKey],
             options: .skipsHiddenFiles
         ) else { return [] }
 
@@ -304,17 +371,15 @@ final class AppState {
 
     private func commitAndPersist(path: URL, message: String) {
         Task.detached {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            process.arguments = ["-C", path.path, "add", "-A"]
-            try? process.run()
-            process.waitUntilExit()
+            let add = Process()
+            add.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            add.arguments = ["-C", path.path, "add", "-A"]
+            try? add.run(); add.waitUntilExit()
 
-            let commitProcess = Process()
-            commitProcess.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            commitProcess.arguments = ["-C", path.path, "commit", "-m", message]
-            try? commitProcess.run()
-            commitProcess.waitUntilExit()
+            let commit = Process()
+            commit.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            commit.arguments = ["-C", path.path, "commit", "-m", message]
+            try? commit.run(); commit.waitUntilExit()
         }
     }
 }
