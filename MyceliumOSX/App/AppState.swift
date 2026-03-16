@@ -249,7 +249,7 @@ final class AppState {
     // MARK: - Text Input
 
     func sendTextMessage(_ text: String) {
-        guard textClient != nil else {
+        guard let client = textClient else {
             statusMessage = "Not configured. Open Settings."
             return
         }
@@ -259,30 +259,63 @@ final class AppState {
 
         if mode == .voice {
             voiceSession.sendText(text)
-        } else {
-            isProcessing = true
-            statusMessage = "Thinking..."
+            return
+        }
 
-            Task {
-                do {
-                    let response = try await textClient!.send(text)
-                    for tc in response.toolCalls {
-                        handleToolCall(callId: tc.id, name: tc.name, args: tc.args)
-                    }
-                    if !response.text.isEmpty {
-                        let modelEntry = TranscriptEntry(
-                            role: .model,
-                            text: response.text.trimmingCharacters(in: .whitespacesAndNewlines),
-                            originPop: deviceId
-                        )
-                        appendTranscriptEntry(modelEntry)
-                    }
-                    statusMessage = mountedRingName ?? ""
-                } catch {
-                    statusMessage = "Error: \(error.localizedDescription)"
-                }
-                isProcessing = false
+        isProcessing = true
+        statusMessage = "Thinking..."
+        let startTime = Date()
+        print("[AppState] Sending text to Gemini: \(text.prefix(50))")
+
+        // Update elapsed time while waiting
+        let timerTask = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { break }
+                let elapsed = Int(Date().timeIntervalSince(startTime))
+                self.statusMessage = "Thinking... (\(elapsed)s)"
             }
+        }
+
+        Task {
+            do {
+                let response = try await client.send(text)
+                timerTask.cancel()
+                let elapsed = String(format: "%.1f", Date().timeIntervalSince(startTime))
+                print("[AppState] Got response in \(elapsed)s: \(response.text.prefix(80))")
+
+                for tc in response.toolCalls {
+                    handleToolCall(callId: tc.id, name: tc.name, args: tc.args)
+                }
+
+                if !response.text.isEmpty {
+                    let modelEntry = TranscriptEntry(
+                        role: .model,
+                        text: response.text.trimmingCharacters(in: .whitespacesAndNewlines),
+                        originPop: deviceId
+                    )
+                    appendTranscriptEntry(modelEntry)
+                } else {
+                    print("[AppState] Empty response from Gemini")
+                    statusMessage = "Empty response"
+                }
+
+                if statusMessage == "Thinking..." {
+                    statusMessage = mountedRingName ?? ""
+                }
+            } catch {
+                timerTask.cancel()
+                print("[AppState] Text send error: \(error)")
+                statusMessage = "Error: \(error.localizedDescription)"
+                // Add error as system message so user can see it
+                let errorEntry = TranscriptEntry(
+                    role: .system,
+                    text: "Error: \(error.localizedDescription)",
+                    originPop: deviceId
+                )
+                appendTranscriptEntry(errorEntry)
+            }
+            isProcessing = false
         }
     }
 

@@ -17,8 +17,10 @@ final class GlobalHotkeyManager {
     }
 
     func start() {
+        print("[Hotkey] Starting... AXIsProcessTrusted=\(AXIsProcessTrusted())")
         if installEventTap() { return }
 
+        print("[Hotkey] Event tap failed. Requesting accessibility...")
         if !hasPrompted {
             hasPrompted = true
             let key = "AXTrustedCheckOptionPrompt" as CFString

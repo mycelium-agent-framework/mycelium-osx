@@ -22,6 +22,20 @@ struct TranscriptView: View {
                             .id("partial")
                     }
 
+                    // Processing indicator at bottom of chat
+                    if appState.isProcessing {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text(appState.statusMessage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .id("processing")
+                    }
+
                     // Thinking block (verbose mode)
                     if appState.showThinking && !appState.lastThinking.isEmpty {
                         DisclosureGroup("Thinking") {

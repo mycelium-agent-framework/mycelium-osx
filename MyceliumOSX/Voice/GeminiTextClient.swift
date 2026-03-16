@@ -34,6 +34,11 @@ actor GeminiTextClient {
             "systemInstruction": [
                 "parts": [["text": systemInstruction]]
             ],
+            "generationConfig": [
+                "thinkingConfig": [
+                    "thinkingBudget": 1024  // Limit thinking tokens to reduce latency
+                ]
+            ],
         ]
 
         // Keep history manageable (last 20 turns)
