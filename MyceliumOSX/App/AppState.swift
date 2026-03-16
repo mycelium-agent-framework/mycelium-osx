@@ -264,20 +264,31 @@ final class AppState {
     private func checkOllamaAvailability(systemInstruction: String) {
         let client = OllamaClient(model: "gemma3:4b", systemInstruction: systemInstruction)
         ollamaClient = client
-        isProcessing = true
         statusMessage = "Checking local model..."
+        print("[AppState] Checking Ollama availability...")
 
         Task {
             let available = await client.isAvailable()
-            useLocalModel = available
-            isProcessing = false
+            self.useLocalModel = available
+            print("[AppState] Ollama check result: available=\(available), useLocalModel=\(self.useLocalModel)")
 
             if available {
+                // Warmup: first Ollama call loads the model into memory
+                statusMessage = "Loading local model..."
+                isProcessing = true
+                let start = Date()
+                do {
+                    let _ = try await client.send(prompt: "Ready.", history: [])
+                    let elapsed = String(format: "%.1f", Date().timeIntervalSince(start))
+                    print("[AppState] Ollama warmup in \(elapsed)s")
+                } catch {
+                    print("[AppState] Ollama warmup failed: \(error)")
+                }
+                isProcessing = false
                 statusMessage = "Ready (local: gemma3:4b)"
-                print("[AppState] Ollama available — using local model as primary")
             } else if let ring = mountedRingName {
                 statusMessage = "Ring: \(ring) (cloud)"
-                print("[AppState] Ollama not available — using Gemini cloud")
+                print("[AppState] Ollama not available — falling back to Gemini")
             }
         }
     }
@@ -295,6 +306,7 @@ final class AppState {
 
         isProcessing = true
         let startTime = Date()
+        print("[AppState] sendTextMessage: useLocalModel=\(useLocalModel), ollamaClient=\(ollamaClient != nil), textClient=\(textClient != nil)")
 
         if useLocalModel, let ollama = ollamaClient {
             // Local-first: use Ollama
