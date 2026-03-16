@@ -65,7 +65,7 @@ struct FloatingPanelView: View {
             }
 
             if appState.mode == .voice {
-                if appState.isListening {
+                if appState.isRecording {
                     Image(systemName: "mic.fill")
                         .foregroundStyle(.red)
                         .symbolEffect(.pulse)
@@ -200,14 +200,46 @@ struct VoiceModeIndicator: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Audio level bars
-            ForEach(0..<5, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(barColor)
-                    .frame(width: 4, height: barHeight(index: i))
-                    .animation(.easeInOut(duration: 0.1), value: appState.voiceSession.audioLevel)
+        HStack(spacing: 8) {
+            // Push-to-talk button
+            Button {
+                // No-op: use press/release gestures
+            } label: {
+                HStack(spacing: 6) {
+                    // Audio level bars (visible while recording)
+                    if appState.isRecording {
+                        ForEach(0..<5, id: \.self) { i in
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.red)
+                                .frame(width: 3, height: barHeight(index: i))
+                                .animation(.easeInOut(duration: 0.1), value: appState.voiceSession.audioLevel)
+                        }
+                    }
+
+                    Image(systemName: appState.isRecording ? "mic.fill" : "mic")
+                        .font(.title2)
+                    Text(appState.isRecording ? "Recording..." : "Hold to talk")
+                        .font(.caption)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(appState.isRecording ? Color.red.opacity(0.2) : Color.gray.opacity(0.15))
+                )
             }
+            .buttonStyle(.plain)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        if !appState.isRecording {
+                            appState.voiceSession.startRecording()
+                        }
+                    }
+                    .onEnded { _ in
+                        appState.voiceSession.stopRecording()
+                    }
+            )
 
             if appState.isSpeaking {
                 Button {
@@ -216,20 +248,12 @@ struct VoiceModeIndicator: View {
                     HStack(spacing: 4) {
                         Image(systemName: "stop.fill")
                             .font(.caption2)
-                        Text("Interrupt")
+                        Text("Stop")
                             .font(.caption)
                     }
                 }
                 .buttonStyle(.bordered)
                 .tint(.orange)
-            } else if appState.isListening {
-                Text("Listening...")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-            } else {
-                Text("Connecting...")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Spacer()
@@ -241,18 +265,13 @@ struct VoiceModeIndicator: View {
             .buttonStyle(.bordered)
         }
         .padding(.horizontal, 4)
-        .frame(height: 30)
-    }
-
-    private var barColor: Color {
-        appState.isSpeaking ? .blue : .green
+        .frame(height: 36)
     }
 
     private func barHeight(index: Int) -> CGFloat {
         let level = CGFloat(appState.voiceSession.audioLevel)
         let base: CGFloat = 4
-        let maxHeight: CGFloat = 24
-        // Each bar has a slightly different threshold for visual variety
+        let maxHeight: CGFloat = 20
         let threshold = CGFloat(index) * 0.15
         let active = max(level - threshold, 0) / (1.0 - threshold)
         return base + active * (maxHeight - base)

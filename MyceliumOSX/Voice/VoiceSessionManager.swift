@@ -1,7 +1,7 @@
 import Foundation
 
-/// Orchestrates the full voice pipeline:
-///   mic → GeminiLive → playback → transcript persistence
+/// Orchestrates the full voice pipeline in push-to-talk mode:
+///   Hold button → mic streams to Gemini → release → Gemini responds with audio + text
 @MainActor
 @Observable
 final class VoiceSessionManager {
@@ -10,15 +10,17 @@ final class VoiceSessionManager {
     private let playback = AudioPlaybackManager()
 
     private(set) var isConnected = false
-    private(set) var isListening = false
+    /// True while user is holding the talk button and mic is streaming.
+    private(set) var isRecording = false
+    /// True while Vivian is speaking audio.
     private(set) var isSpeaking = false
+
+    private var partialBuffer = ""
+    private var thinkingBuffer = ""
+    private var reconnectTask: Task<Void, Never>?
 
     /// Mic audio level (0.0-1.0) for UI visualization.
     var audioLevel: Float { capture.audioLevel }
-
-    private var partialBuffer = ""
-    private var connectingTask: Task<Void, Never>?
-    private var reconnectTask: Task<Void, Never>?
 
     // Callbacks to AppState
     var onTranscriptEntry: ((TranscriptEntry) -> Void)?
@@ -36,73 +38,43 @@ final class VoiceSessionManager {
     func configure(apiKey: String, systemInstruction: String) {
         self.apiKey = apiKey
         self.systemInstruction = systemInstruction
-        print("[VoiceSession] Configured with API key (\(apiKey.prefix(10))...) and \(systemInstruction.count) char system instruction")
+        print("[VoiceSession] Configured with API key (\(apiKey.prefix(10))...)")
     }
 
     // MARK: - Session Lifecycle
 
-    /// Connect to Gemini Live API. Waits for setupComplete before returning.
     func startSession() async -> Bool {
         guard !apiKey.isEmpty else {
-            print("[VoiceSession] No API key configured.")
             onStatusMessage?("No API key. Open Settings.")
             return false
         }
         guard gemini == nil else { return isConnected }
 
-        onStatusMessage?("Connecting to Gemini...")
+        onStatusMessage?("Connecting...")
 
         let client = GeminiLiveClient(apiKey: apiKey)
         self.gemini = client
 
         client.onTextReceived = { [weak self] text, isFinal in
-            Task { @MainActor [weak self] in
-                self?.handleText(text, isFinal: isFinal)
-            }
+            Task { @MainActor [weak self] in self?.handleText(text, isFinal: isFinal) }
         }
-
         client.onThinkingReceived = { [weak self] text, isFinal in
-            Task { @MainActor [weak self] in
-                self?.handleThinking(text, isFinal: isFinal)
-            }
+            Task { @MainActor [weak self] in self?.handleThinking(text, isFinal: isFinal) }
         }
-
         client.onUserTranscript = { [weak self] text in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                print("[VoiceSession] User transcript: \(text)")
-                let entry = TranscriptEntry(
-                    role: .user,
-                    text: text.trimmingCharacters(in: .whitespacesAndNewlines),
-                    isFinal: true,
-                    originPop: "osx-desktop"
-                )
-                self.onTranscriptEntry?(entry)
-            }
+            Task { @MainActor [weak self] in self?.handleUserTranscript(text) }
         }
-
         client.onAudioReceived = { [weak self] data in
-            Task { @MainActor [weak self] in
-                self?.handleAudio(data)
-            }
+            Task { @MainActor [weak self] in self?.handleAudio(data) }
         }
-
         client.onToolCall = { [weak self] callId, name, args in
-            Task { @MainActor [weak self] in
-                self?.onToolCall?(callId, name, args)
-            }
+            Task { @MainActor [weak self] in self?.onToolCall?(callId, name, args) }
         }
-
         client.onError = { [weak self] error in
-            Task { @MainActor [weak self] in
-                self?.handleError(error)
-            }
+            Task { @MainActor [weak self] in self?.handleError(error) }
         }
-
         client.onDisconnect = { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.handleDisconnect()
-            }
+            Task { @MainActor [weak self] in self?.handleDisconnect() }
         }
 
         let ok = await client.connect(systemInstruction: systemInstruction)
@@ -110,112 +82,77 @@ final class VoiceSessionManager {
         if ok {
             isConnected = true
             onConnectionChange?(true)
-            onStatusMessage?("Connected")
-            print("[VoiceSession] Session started successfully.")
+            onStatusMessage?("Ready — hold mic to talk")
+            print("[VoiceSession] Connected.")
         } else {
             gemini = nil
             onStatusMessage?("Connection failed")
-            print("[VoiceSession] Session failed to start.")
         }
 
         return ok
     }
 
     func endSession() {
-        connectingTask?.cancel()
         reconnectTask?.cancel()
-        connectingTask = nil
         reconnectTask = nil
-        stopListening()
+        stopRecording()
         playback.stop()
         gemini?.disconnect()
         gemini = nil
         isConnected = false
         isSpeaking = false
         partialBuffer = ""
+        thinkingBuffer = ""
         onConnectionChange?(false)
-        print("[VoiceSession] Session ended.")
     }
 
-    // MARK: - Listening
+    // MARK: - Push-to-Talk
 
-    func startListening() {
-        connectingTask = Task { @MainActor in
-            onStatusMessage?("Requesting mic access...")
-
+    /// Start recording (user pressed and is holding the talk button).
+    func startRecording() {
+        Task { @MainActor in
+            // Request mic permission if needed
             let micOk = await capture.requestPermission()
             guard micOk else {
-                print("[VoiceSession] Microphone permission denied.")
-                onStatusMessage?("Mic denied — open System Settings > Privacy > Microphone")
+                onStatusMessage?("Mic denied — System Settings > Privacy > Microphone")
                 return
             }
-            print("[VoiceSession] Mic permission granted.")
 
+            // Connect if needed
             if !isConnected {
-                onStatusMessage?("Connecting to Gemini Live...")
                 let ok = await startSession()
-                guard ok else {
-                    onStatusMessage?("Failed to connect to Gemini")
-                    return
-                }
+                guard ok else { return }
             }
 
-            onStatusMessage?("Starting mic capture...")
-            beginCapture()
+            // Interrupt any current playback
+            if isSpeaking {
+                bargeIn()
+            }
+
+            // Start streaming mic to Gemini
+            capture.onAudioChunk = { [weak self] data in
+                self?.gemini?.sendAudio(pcmData: data)
+            }
+
+            do {
+                try capture.startCapture()
+                isRecording = true
+                onStatusMessage?("Recording — release to send")
+                print("[VoiceSession] Push-to-talk: recording started")
+            } catch {
+                onStatusMessage?("Mic error: \(error.localizedDescription)")
+            }
         }
     }
 
-    func stopListening() {
+    /// Stop recording (user released the talk button).
+    func stopRecording() {
+        guard isRecording else { return }
         capture.stopCapture()
         capture.onAudioChunk = nil
-        isListening = false
-    }
-
-    func toggleListening() {
-        if isListening {
-            stopListening()
-        } else {
-            startListening()
-        }
-    }
-
-    /// Minimum audio level to send to Gemini (noise gate).
-    /// Below this threshold, silence is assumed and nothing is sent.
-    private let noiseGateThreshold: Float = 0.02
-
-    /// Cooldown after Vivian finishes speaking before mic resumes sending.
-    private var postSpeechCooldown = false
-
-    private func beginCapture() {
-        var chunkCount = 0
-        capture.onAudioChunk = { [weak self] data in
-            guard let self else { return }
-
-            // Don't send while Vivian is speaking (echo prevention)
-            guard !self.isSpeaking else { return }
-
-            // Don't send during post-speech cooldown (prevents noise triggering new response)
-            guard !self.postSpeechCooldown else { return }
-
-            // Noise gate: only send when audio level exceeds threshold
-            guard self.capture.audioLevel > self.noiseGateThreshold else { return }
-
-            self.gemini?.sendAudio(pcmData: data)
-            chunkCount += 1
-            if chunkCount == 1 {
-                print("[VoiceSession] First audio chunk sent (\(data.count) bytes), level: \(self.capture.audioLevel)")
-            }
-        }
-
-        do {
-            try capture.startCapture()
-            isListening = true
-            onStatusMessage?("Voice active — speak now")
-            print("[VoiceSession] Mic capture started with noise gate at \(noiseGateThreshold)")
-        } catch {
-            print("[VoiceSession] Failed to start capture: \(error)")
-            onStatusMessage?("Mic error: \(error.localizedDescription)")
-        }
+        isRecording = false
+        onStatusMessage?("Processing...")
+        print("[VoiceSession] Push-to-talk: recording stopped, waiting for response")
     }
 
     // MARK: - Text Input
@@ -225,80 +162,18 @@ final class VoiceSessionManager {
             Task { @MainActor in
                 let ok = await startSession()
                 guard ok else { return }
-                gemini?.sendText(text)
+                self.gemini?.sendText(text)
             }
         } else {
             gemini?.sendText(text)
         }
     }
 
-    // MARK: - Tool Responses
-
     func sendToolResponse(callId: String, result: [String: Any]) {
         gemini?.sendToolResponse(callId: callId, result: result)
     }
 
-    // MARK: - Handlers
-
-    private var thinkingBuffer = ""
-
-    private func handleThinking(_ text: String, isFinal: Bool) {
-        if isFinal {
-            let fullThinking = thinkingBuffer + text
-            thinkingBuffer = ""
-            if !fullThinking.isEmpty {
-                onThinkingText?(fullThinking)
-            }
-        } else {
-            thinkingBuffer += text
-        }
-    }
-
-    private func handleText(_ text: String, isFinal: Bool) {
-        print("[VoiceSession] Text received (final=\(isFinal)): \(text.prefix(80))")
-        if isFinal {
-            let fullText = partialBuffer + text
-            partialBuffer = ""
-            onPartialText?("")
-
-            if !fullText.isEmpty {
-                let entry = TranscriptEntry(
-                    role: .model,
-                    text: fullText.trimmingCharacters(in: .whitespacesAndNewlines),
-                    isFinal: true,
-                    originPop: "osx-desktop"
-                )
-                onTranscriptEntry?(entry)
-                print("[VoiceSession] Transcript entry added: \(fullText.prefix(80))")
-            }
-        } else {
-            partialBuffer += text
-            onPartialText?(partialBuffer)
-        }
-    }
-
-    private var speakingTimer: Task<Void, Never>?
-
-    private func handleAudio(_ data: Data) {
-        isSpeaking = true
-        postSpeechCooldown = true
-        playback.enqueue(pcmData: data)
-
-        // Reset the "done speaking" timer on each audio chunk.
-        speakingTimer?.cancel()
-        speakingTimer = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled else { return }
-            self.isSpeaking = false
-
-            // Extra cooldown: wait 1.5s after speech ends before sending mic audio again.
-            // This prevents ambient noise from immediately triggering a new response.
-            try? await Task.sleep(for: .seconds(1.5))
-            guard !Task.isCancelled else { return }
-            self.postSpeechCooldown = false
-            print("[VoiceSession] Post-speech cooldown ended, mic active")
-        }
-    }
+    // MARK: - Barge-In
 
     func bargeIn() {
         playback.interrupt()
@@ -307,17 +182,79 @@ final class VoiceSessionManager {
         onPartialText?("")
     }
 
+    // MARK: - Handlers
+
+    private func handleUserTranscript(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        print("[VoiceSession] User said: \(trimmed)")
+        let entry = TranscriptEntry(
+            role: .user,
+            text: trimmed,
+            isFinal: true,
+            originPop: "osx-desktop"
+        )
+        onTranscriptEntry?(entry)
+    }
+
+    private func handleText(_ text: String, isFinal: Bool) {
+        if isFinal {
+            let fullText = partialBuffer + text
+            partialBuffer = ""
+            onPartialText?("")
+
+            let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                print("[VoiceSession] Model said: \(trimmed.prefix(80))")
+                let entry = TranscriptEntry(
+                    role: .model,
+                    text: trimmed,
+                    isFinal: true,
+                    originPop: "osx-desktop"
+                )
+                onTranscriptEntry?(entry)
+                onStatusMessage?("Ready — hold mic to talk")
+            }
+        } else {
+            partialBuffer += text
+            onPartialText?(partialBuffer)
+        }
+    }
+
+    private func handleThinking(_ text: String, isFinal: Bool) {
+        if isFinal {
+            let full = thinkingBuffer + text
+            thinkingBuffer = ""
+            if !full.isEmpty { onThinkingText?(full) }
+        } else {
+            thinkingBuffer += text
+        }
+    }
+
+    private var speakingTimer: Task<Void, Never>?
+
+    private func handleAudio(_ data: Data) {
+        isSpeaking = true
+        playback.enqueue(pcmData: data)
+
+        speakingTimer?.cancel()
+        speakingTimer = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            self.isSpeaking = false
+        }
+    }
+
     private func handleError(_ error: Error) {
         print("[VoiceSession] Error: \(error.localizedDescription)")
         isConnected = false
-        isListening = false
+        isRecording = false
         onConnectionChange?(false)
         onStatusMessage?("Error: \(error.localizedDescription)")
         scheduleReconnect()
     }
 
     private func handleDisconnect() {
-        print("[VoiceSession] Disconnected.")
         isConnected = false
         isSpeaking = false
         onConnectionChange?(false)
@@ -325,22 +262,14 @@ final class VoiceSessionManager {
         scheduleReconnect()
     }
 
-    // MARK: - Reconnection
-
     private func scheduleReconnect() {
         reconnectTask?.cancel()
         reconnectTask = Task { @MainActor in
             onStatusMessage?("Reconnecting in 3s...")
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
-
             self.gemini = nil
-            let wasListening = self.isListening
-            let ok = await self.startSession()
-
-            if ok && wasListening {
-                self.beginCapture()
-            }
+            _ = await self.startSession()
         }
     }
 }

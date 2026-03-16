@@ -41,7 +41,7 @@ final class AppState {
 
     let voiceSession = VoiceSessionManager()
 
-    var isListening: Bool { voiceSession.isListening }
+    var isRecording: Bool { voiceSession.isRecording }
     var isConnected: Bool { mode == .voice && voiceSession.isConnected }
     var isSpeaking: Bool { voiceSession.isSpeaking }
 
@@ -257,12 +257,14 @@ final class AppState {
             return
         }
         mode = .voice
-        voiceSession.startListening()
-        statusMessage = "Voice mode"
+        // Just connect the session — mic is controlled by push-to-talk
+        Task {
+            _ = await voiceSession.startSession()
+        }
     }
 
     func stopVoiceMode() {
-        voiceSession.stopListening()
+        voiceSession.stopRecording()
         voiceSession.endSession()
         mode = .text
         statusMessage = mountedRingName ?? ""
