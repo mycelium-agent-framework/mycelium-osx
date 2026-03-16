@@ -3,7 +3,7 @@ import Foundation
 
 /// Captures microphone audio as 16-bit PCM, 16kHz mono for Gemini Live API.
 @Observable
-final class AudioCaptureManager {
+final class AudioCaptureManager: AudioCapturing {
     private let engine = AVAudioEngine()
     private var isCapturing = false
 

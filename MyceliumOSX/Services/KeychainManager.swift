@@ -4,7 +4,7 @@ import Security
 /// Stores and retrieves API keys from the macOS Keychain.
 /// Caches values in memory after first read to minimize Keychain access prompts
 /// (ad-hoc signed apps get prompted on each Keychain access).
-enum KeychainManager {
+enum KeychainManager: KeychainStoring {
     private static let service = "org.mycelium.osx"
     private static var cache: [String: String] = [:]
 

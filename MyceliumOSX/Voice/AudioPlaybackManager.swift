@@ -3,7 +3,7 @@ import Foundation
 
 /// Plays back PCM audio received from Gemini Live API (24kHz, 16-bit LE mono).
 @Observable
-final class AudioPlaybackManager {
+final class AudioPlaybackManager: AudioPlaying {
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private var isPlaying = false

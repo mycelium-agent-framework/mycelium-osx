@@ -2,12 +2,26 @@ import Foundation
 
 /// Orchestrates the full voice pipeline in push-to-talk mode:
 ///   Hold button → mic streams to Gemini → release → Gemini responds with audio + text
+/// Factory for creating Gemini Live clients. Allows test injection.
+typealias GeminiLiveClientFactory = (String) -> GeminiLiveConnecting
+
 @MainActor
 @Observable
 final class VoiceSessionManager {
-    private var gemini: GeminiLiveClient?
-    private let capture = AudioCaptureManager()
-    private let playback = AudioPlaybackManager()
+    private var gemini: GeminiLiveConnecting?
+    private let capture: AudioCapturing
+    private let playback: AudioPlaying
+    private let makeClient: GeminiLiveClientFactory
+
+    init(
+        capture: AudioCapturing = AudioCaptureManager(),
+        playback: AudioPlaying = AudioPlaybackManager(),
+        clientFactory: @escaping GeminiLiveClientFactory = { apiKey in GeminiLiveClient(apiKey: apiKey) }
+    ) {
+        self.capture = capture
+        self.playback = playback
+        self.makeClient = clientFactory
+    }
 
     private(set) var isConnected = false
     /// True while user is holding the talk button and mic is streaming.
@@ -52,7 +66,7 @@ final class VoiceSessionManager {
 
         onStatusMessage?("Connecting...")
 
-        let client = GeminiLiveClient(apiKey: apiKey)
+        let client = makeClient(apiKey)
         self.gemini = client
 
         client.onTextReceived = { [weak self] text, isFinal in

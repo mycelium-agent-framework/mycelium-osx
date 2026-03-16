@@ -9,7 +9,7 @@ import Foundation
 /// - Send `realtimeInput` with base64 PCM audio chunks
 /// - Receive `serverContent` with text parts and audio responses
 @Observable
-final class GeminiLiveClient: @unchecked Sendable {
+final class GeminiLiveClient: GeminiLiveConnecting, @unchecked Sendable {
     private var webSocket: URLSessionWebSocketTask?
     private var session: URLSession?
     private var setupContinuation: CheckedContinuation<Bool, Never>?
