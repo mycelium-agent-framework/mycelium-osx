@@ -244,6 +244,38 @@ final class AppState {
 
         textClient = deps.makeTextClient(apiKey, instruction)
         voiceSession.configure(apiKey: apiKey, systemInstruction: instruction)
+
+        // Warmup: send a silent ping so Gemini caches the system instruction.
+        // First real message will be fast.
+        warmUpTextClient()
+    }
+
+    private var isWarmingUp = false
+
+    private func warmUpTextClient() {
+        guard let client = textClient else { return }
+        isWarmingUp = true
+        statusMessage = "Warming up..."
+        isProcessing = true
+
+        Task {
+            let start = Date()
+            do {
+                // A minimal prompt that gets the system instruction cached
+                let _ = try await client.send("Ready.")
+                // Clear the warmup exchange from history
+                await client.clearHistory()
+                let elapsed = String(format: "%.1f", Date().timeIntervalSince(start))
+                print("[AppState] Warmup complete in \(elapsed)s")
+            } catch {
+                print("[AppState] Warmup failed: \(error)")
+            }
+            isWarmingUp = false
+            isProcessing = false
+            if let ring = mountedRingName {
+                statusMessage = "Ring: \(ring)"
+            }
+        }
     }
 
     // MARK: - Text Input
@@ -251,6 +283,10 @@ final class AppState {
     func sendTextMessage(_ text: String) {
         guard let client = textClient else {
             statusMessage = "Not configured. Open Settings."
+            return
+        }
+        guard !isWarmingUp else {
+            statusMessage = "Still warming up..."
             return
         }
 
