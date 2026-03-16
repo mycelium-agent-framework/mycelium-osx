@@ -95,12 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
         }
 
-        // Enter voice mode if not already
-        if appState.mode != .voice {
-            appState.startVoiceMode()
-        }
-
-        // Start recording (push-to-talk)
+        // Enter voice mode and start recording.
+        // startRecording() handles connecting if needed — no race condition.
+        appState.mode = .voice
         appState.voiceSession.startRecording()
     }
 

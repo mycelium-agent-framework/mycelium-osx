@@ -75,6 +75,8 @@ final class GeminiLiveClient: @unchecked Sendable {
                         ["text": systemInstruction]
                     ]
                 ],
+                "outputAudioTranscription": [:] as [String: Any],
+                "inputAudioTranscription": [:] as [String: Any],
                 "tools": buildToolDeclarations()
             ]
         ]
@@ -234,7 +236,7 @@ final class GeminiLiveClient: @unchecked Sendable {
     private func handleServerContent(_ content: [String: Any]) {
         let turnComplete = content["turnComplete"] as? Bool ?? false
 
-        // Process model turn parts if present
+        // Process model turn parts (audio + thinking text)
         if let modelTurn = content["modelTurn"] as? [String: Any],
            let parts = modelTurn["parts"] as? [[String: Any]] {
             for part in parts {
@@ -242,10 +244,10 @@ final class GeminiLiveClient: @unchecked Sendable {
 
                 if let text = part["text"] as? String {
                     if isThought {
-                        onThinkingReceived?(text, turnComplete)
-                    } else {
-                        onTextReceived?(text, false)  // not final until turnComplete
+                        onThinkingReceived?(text, false)
                     }
+                    // Non-thought text in AUDIO mode is typically thinking too,
+                    // so we rely on outputTranscription for the actual spoken text
                 }
 
                 if let inlineData = part["inlineData"] as? [String: Any],
@@ -256,15 +258,29 @@ final class GeminiLiveClient: @unchecked Sendable {
             }
         }
 
-        // Handle input transcription (what Gemini heard the user say)
+        // Output transcription: what Vivian actually said (spoken words, not thinking)
+        if let outputTranscription = content["outputTranscription"] as? [String: Any],
+           let text = outputTranscription["text"] as? String, !text.isEmpty {
+            print("[GeminiLive] Vivian said: \(text)")
+            onTextReceived?(text, false)
+        }
+
+        // Input transcription: what Gemini heard the user say
+        if let inputTranscription = content["inputTranscription"] as? [String: Any],
+           let text = inputTranscription["text"] as? String, !text.isEmpty {
+            print("[GeminiLive] User said: \(text)")
+            onUserTranscript?(text)
+        }
+
+        // Legacy field name check
         if let inputTranscript = content["inputTranscript"] as? String, !inputTranscript.isEmpty {
-            print("[GeminiLive] User said: \(inputTranscript)")
-            // Fire as a user transcript entry via a separate callback
+            print("[GeminiLive] User said (legacy): \(inputTranscript)")
             onUserTranscript?(inputTranscript)
         }
 
-        // Signal turn complete separately
+        // Finalize thinking on turn complete
         if turnComplete {
+            onThinkingReceived?("", true)
             onTextReceived?("", true)
         }
     }
