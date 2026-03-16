@@ -144,10 +144,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // Configure voice with API key
-        let apiKey = defaults.string(forKey: "geminiApiKey") ?? ""
-        if !apiKey.isEmpty {
-            appState.configureVoice(apiKey: apiKey)
-        }
+        // Voice is configured automatically by mountRing → configureVoiceForCurrentRing
     }
 }

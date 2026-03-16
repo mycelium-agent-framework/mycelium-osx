@@ -50,12 +50,10 @@ final class AppState {
 
     // MARK: - Initialization
 
-    /// Whether we have a valid configuration (ring0 + API key).
+    /// Whether we have a valid configuration (ring0 path set).
     var isConfigured: Bool {
-        let defaults = UserDefaults.standard
-        let hasPath = !(defaults.string(forKey: "ring0Path") ?? "").isEmpty
-        let hasKey = !(defaults.string(forKey: "geminiApiKey") ?? "").isEmpty
-        return hasPath && hasKey
+        let hasPath = !(UserDefaults.standard.string(forKey: "ring0Path") ?? "").isEmpty
+        return hasPath
     }
 
     init() {
@@ -86,11 +84,8 @@ final class AppState {
             }
         }
 
-        // Configure voice
-        let apiKey = defaults.string(forKey: "geminiApiKey") ?? ""
-        if !apiKey.isEmpty {
-            configureVoice(apiKey: apiKey)
-        }
+        // Configure voice from the mounted ring's backend config
+        configureVoiceForCurrentRing()
     }
 
     func bootstrap(ring0Path: URL) {
@@ -103,19 +98,32 @@ final class AppState {
         }
     }
 
-    /// Call after bootstrap + ring mount to configure and start voice.
-    func configureVoice(apiKey: String) {
+    /// Resolve the API key for the currently mounted ring from Keychain
+    /// and configure the voice session.
+    func configureVoiceForCurrentRing() {
+        guard let ringName = mountedRingName,
+              let manifest = manifest,
+              let ring = manifest.rings.first(where: { $0.name == ringName }),
+              let backend = ring.backend
+        else {
+            print("[AppState] No backend config for mounted ring.")
+            return
+        }
+
+        guard let apiKey = KeychainManager.get(ref: backend.apiKeyRef) else {
+            print("[AppState] No API key in Keychain for ref '\(backend.apiKeyRef)'. Open Settings to add one.")
+            return
+        }
+
         // Build system instruction from SOUL.md + ring SOUL.md + recent context
         var instruction = soulContent
 
-        // Append ring-specific SOUL if we have a mounted ring
         if let ringPath = mountedRingPath, let rm = ringManager {
             if let ringSoul = rm.loadSOUL(ringPath: ringPath) {
                 instruction += "\n\n---\n\n" + ringSoul
             }
         }
 
-        // Append recent context from last handoff spore
         if let store = sporeStore {
             let handoffs = store.loadAll().filter { $0.type == .handoff }
             if let lastHandoff = handoffs.last, let recap = lastHandoff.contextRecap {
@@ -124,11 +132,17 @@ final class AppState {
         }
 
         voiceSession.configure(apiKey: apiKey, systemInstruction: instruction)
+        print("[AppState] Voice configured for ring '\(ringName)' via backend '\(backend.apiKeyRef)' (\(backend.provider)/\(backend.model))")
     }
 
     // MARK: - Ring & Channel
 
     func mountRing(path: URL, name: String) {
+        // End current voice session (different ring = different backend)
+        if mountedRingName != nil {
+            voiceSession.endSession()
+        }
+
         if let current = mountedRingPath {
             commitAndPersist(path: current, message: "Auto-commit before ring switch to \(name)")
         }
@@ -142,6 +156,9 @@ final class AppState {
         if let defaultChannel = channels.first(where: { $0.name == "default" }) ?? channels.first {
             switchChannel(to: defaultChannel)
         }
+
+        // Configure voice for the new ring's backend
+        configureVoiceForCurrentRing()
     }
 
     func switchChannel(to channel: Channel) {

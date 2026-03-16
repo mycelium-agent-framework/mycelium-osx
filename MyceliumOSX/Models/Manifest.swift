@@ -16,14 +16,26 @@ struct PopEntry: Codable, Sendable {
     }
 }
 
+struct BackendConfig: Codable, Sendable {
+    let provider: String  // "gemini", "ollama", etc.
+    let apiKeyRef: String // Logical name → resolves to Keychain entry
+    let model: String
+
+    enum CodingKeys: String, CodingKey {
+        case provider, model
+        case apiKeyRef = "api_key_ref"
+    }
+}
+
 struct RingEntry: Codable, Sendable {
     let name: String
     let repoUrl: String
     let localPathHint: String?
     let accessRules: [String: [String]]
+    let backend: BackendConfig?
 
     enum CodingKeys: String, CodingKey {
-        case name
+        case name, backend
         case repoUrl = "repo_url"
         case localPathHint = "local_path_hint"
         case accessRules = "access_rules"
