@@ -71,27 +71,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Global Hotkey
 
     private func setupHotkey() {
-        hotkeyManager = GlobalHotkeyManager { [weak self] in
-            Task { @MainActor in
-                self?.handleHotkeyActivation()
+        hotkeyManager = GlobalHotkeyManager(
+            onPress: { [weak self] in
+                Task { @MainActor in
+                    self?.handleHotkeyPress()
+                }
+            },
+            onRelease: { [weak self] in
+                Task { @MainActor in
+                    self?.handleHotkeyRelease()
+                }
             }
-        }
+        )
         hotkeyManager?.start()
     }
 
     @MainActor
-    private func handleHotkeyActivation() {
-        if appState.isPanelVisible {
-            appState.isPanelVisible = false
-            if appState.mode == .voice {
-                appState.stopVoiceMode()
-            }
-            return
+    private func handleHotkeyPress() {
+        // Show panel if hidden
+        if !appState.isPanelVisible {
+            simulateMediaPlayPause()
+            appState.isPanelVisible = true
+            NSApp.activate(ignoringOtherApps: true)
         }
 
-        simulateMediaPlayPause()
-        appState.isPanelVisible = true
-        NSApp.activate(ignoringOtherApps: true)
+        // Enter voice mode if not already
+        if appState.mode != .voice {
+            appState.startVoiceMode()
+        }
+
+        // Start recording (push-to-talk)
+        appState.voiceSession.startRecording()
+    }
+
+    @MainActor
+    private func handleHotkeyRelease() {
+        // Stop recording — Vivian processes and responds
+        appState.voiceSession.stopRecording()
     }
 
     private func simulateMediaPlayPause() {

@@ -1,30 +1,26 @@
 import Cocoa
 import CoreGraphics
 
-/// Listens for Right Option key press via CGEvent tap.
+/// Listens for Right Option key press/release via CGEvent tap.
 /// Requires Accessibility permission.
 final class GlobalHotkeyManager {
-    private let onActivate: () -> Void
+    private let onPress: () -> Void
+    private let onRelease: () -> Void
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var hasPrompted = false
+    private var isPressed = false
 
-    init(onActivate: @escaping () -> Void) {
-        self.onActivate = onActivate
+    init(onPress: @escaping () -> Void, onRelease: @escaping () -> Void) {
+        self.onPress = onPress
+        self.onRelease = onRelease
     }
 
     func start() {
-        // Try to install the event tap directly.
-        // If it succeeds, we have accessibility — no prompt needed.
-        if installEventTap() {
-            return
-        }
+        if installEventTap() { return }
 
-        // Event tap failed — we need accessibility permission.
-        // Only prompt once per app lifetime.
         if !hasPrompted {
             hasPrompted = true
-            // Use the raw string key to avoid retain issues with the constant
             let key = "AXTrustedCheckOptionPrompt" as CFString
             let options = [key: true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
@@ -44,8 +40,6 @@ final class GlobalHotkeyManager {
         runLoopSource = nil
     }
 
-    // MARK: - Private
-
     private func pollForAccessibility() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
             guard let self, self.eventTap == nil else { return }
@@ -57,7 +51,6 @@ final class GlobalHotkeyManager {
         }
     }
 
-    /// Try to create and install the event tap. Returns true on success.
     @discardableResult
     private func installEventTap() -> Bool {
         guard eventTap == nil else { return true }
@@ -79,9 +72,7 @@ final class GlobalHotkeyManager {
             eventsOfInterest: mask,
             callback: callback,
             userInfo: selfPtr
-        ) else {
-            return false
-        }
+        ) else { return false }
 
         eventTap = tap
         runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
@@ -100,10 +91,24 @@ final class GlobalHotkeyManager {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
 
-        // Right Option key: keycode 61, check that Option is pressed
-        if keyCode == 61 && flags.contains(.maskAlternate) {
+        // Right Option key: keycode 61
+        guard keyCode == 61 else {
+            return Unmanaged.passRetained(event)
+        }
+
+        let optionDown = flags.contains(.maskAlternate)
+
+        if optionDown && !isPressed {
+            // Key pressed
+            isPressed = true
             DispatchQueue.main.async { [weak self] in
-                self?.onActivate()
+                self?.onPress()
+            }
+        } else if !optionDown && isPressed {
+            // Key released
+            isPressed = false
+            DispatchQueue.main.async { [weak self] in
+                self?.onRelease()
             }
         }
 
