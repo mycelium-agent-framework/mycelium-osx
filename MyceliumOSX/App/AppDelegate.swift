@@ -10,7 +10,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupFloatingPanel()
         setupHotkey()
-        loadConfiguration()
+
+        if appState.isConfigured {
+            loadConfiguration()
+        } else {
+            // First launch — show settings
+            SettingsWindowController.shared.show(appState: appState)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

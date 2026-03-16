@@ -50,8 +50,47 @@ final class AppState {
 
     // MARK: - Initialization
 
+    /// Whether we have a valid configuration (ring0 + API key).
+    var isConfigured: Bool {
+        let defaults = UserDefaults.standard
+        let hasPath = !(defaults.string(forKey: "ring0Path") ?? "").isEmpty
+        let hasKey = !(defaults.string(forKey: "geminiApiKey") ?? "").isEmpty
+        return hasPath && hasKey
+    }
+
     init() {
         setupVoiceCallbacks()
+    }
+
+    /// Reload everything from UserDefaults (called after Settings save).
+    func reloadConfiguration() {
+        let defaults = UserDefaults.standard
+
+        // Load Ring 0
+        guard let pathString = defaults.string(forKey: "ring0Path"),
+              !pathString.isEmpty else { return }
+
+        let expandedPath = NSString(string: pathString).expandingTildeInPath
+        let ring0URL = URL(fileURLWithPath: expandedPath)
+        bootstrap(ring0Path: ring0URL)
+
+        // Auto-mount first allowed ring
+        if let manifest = manifest,
+           let pop = manifest.pops.first(where: { $0.deviceId == deviceId }),
+           let firstRingName = pop.allowedRings.first,
+           let ring = manifest.rings.first(where: { $0.name == firstRingName }),
+           let hint = ring.localPathHint {
+            let ringPath = URL(fileURLWithPath: NSString(string: hint).expandingTildeInPath)
+            if FileManager.default.fileExists(atPath: ringPath.path) {
+                mountRing(path: ringPath, name: firstRingName)
+            }
+        }
+
+        // Configure voice
+        let apiKey = defaults.string(forKey: "geminiApiKey") ?? ""
+        if !apiKey.isEmpty {
+            configureVoice(apiKey: apiKey)
+        }
     }
 
     func bootstrap(ring0Path: URL) {

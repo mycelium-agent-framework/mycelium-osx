@@ -5,7 +5,6 @@ struct MyceliumApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // LSUIElement = true means no dock icon, so we use MenuBarExtra only
         MenuBarExtra {
             MenuBarView()
                 .environment(appDelegate.appState)
@@ -13,12 +12,6 @@ struct MyceliumApp: App {
             Image(systemName: "circle.hexagonpath.fill")
         }
         .menuBarExtraStyle(.menu)
-
-        // Settings window for configuring ring paths, API keys, etc.
-        Settings {
-            SettingsView()
-                .environment(appDelegate.appState)
-        }
     }
 }
 
@@ -54,7 +47,7 @@ struct MenuBarView: View {
             .keyboardShortcut("v", modifiers: [.command, .shift])
 
             Button("Settings...") {
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                SettingsWindowController.shared.show(appState: appState)
             }
             .keyboardShortcut(",", modifiers: .command)
 
@@ -65,31 +58,5 @@ struct MenuBarView: View {
             }
             .keyboardShortcut("q", modifiers: .command)
         }
-    }
-}
-
-struct SettingsView: View {
-    @Environment(AppState.self) private var appState
-    @AppStorage("ring0Path") private var ring0PathString: String = ""
-    @AppStorage("geminiApiKey") private var geminiApiKey: String = ""
-
-    var body: some View {
-        Form {
-            Section("Ring 0 Path") {
-                TextField("Path to vivian-core repo", text: $ring0PathString)
-                Text("e.g. ~/git/chasemp/vivian-core")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section("Gemini API Key") {
-                SecureField("API Key", text: $geminiApiKey)
-                Text("Stored in UserDefaults. Keychain migration planned.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .formStyle(.grouped)
-        .frame(width: 450, height: 250)
     }
 }

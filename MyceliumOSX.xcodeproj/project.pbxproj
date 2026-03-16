@@ -26,6 +26,7 @@
 		C7E3471E48C7BD3C38D9745B /* TranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7A06354E1C25CB0EC5BECDC /* TranscriptView.swift */; };
 		CECEA2C65EEC670B18E1585E /* TranscriptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DD1D292CD9BC66EF3CF130B /* TranscriptStore.swift */; };
 		D1117E273BA613D067C4918C /* AudioCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B9BEA44B5ECE6E0FC4AFBE /* AudioCaptureManager.swift */; };
+		E2E279541C04FD33EDD4B07A /* SettingsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63D5C955CDDE531FDC62CEB5 /* SettingsWindowController.swift */; };
 		E8152BAA2BF59475C135DC2D /* TranscriptStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6164E8D838ED32FB91EAC84A /* TranscriptStoreTests.swift */; };
 		F29BB15C4111CFADBC1975D4 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC03DFD7945CA7917DC238BA /* AppDelegate.swift */; };
 /* End PBXBuildFile section */
@@ -53,6 +54,7 @@
 		6164E8D838ED32FB91EAC84A /* TranscriptStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStoreTests.swift; sourceTree = "<group>"; };
 		616A162A47CEE3099C20F1E9 /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
 		616ED4BD3AE5A2751A3D4440 /* TranscriptEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptEntry.swift; sourceTree = "<group>"; };
+		63D5C955CDDE531FDC62CEB5 /* SettingsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsWindowController.swift; sourceTree = "<group>"; };
 		6771B64F87663375851FF8FE /* Spore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Spore.swift; sourceTree = "<group>"; };
 		741FB0899FAA8427A1C23510 /* GeminiLiveClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeminiLiveClient.swift; sourceTree = "<group>"; };
 		7DD1D292CD9BC66EF3CF130B /* TranscriptStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStore.swift; sourceTree = "<group>"; };
@@ -148,6 +150,7 @@
 				4FDDB5348EC71E9147FB33AE /* AppState.swift */,
 				051D33B87048F9E09FAC4508 /* FloatingPanel.swift */,
 				9080A098F342DDE45993186F /* MyceliumApp.swift */,
+				63D5C955CDDE531FDC62CEB5 /* SettingsWindowController.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -267,6 +270,7 @@
 				B853665CD28003641CEE6CFB /* Manifest.swift in Sources */,
 				003F565C720E508474D7A7C5 /* MyceliumApp.swift in Sources */,
 				9C1B005BA7B6A3976AFB4A97 /* RingManager.swift in Sources */,
+				E2E279541C04FD33EDD4B07A /* SettingsWindowController.swift in Sources */,
 				0C18514D675C567EFB79D82D /* Spore.swift in Sources */,
 				C028EE62AA6C5E03A7295249 /* SporeStore.swift in Sources */,
 				2E7F7634091EC1B6A30ABC0E /* TranscriptEntry.swift in Sources */,
