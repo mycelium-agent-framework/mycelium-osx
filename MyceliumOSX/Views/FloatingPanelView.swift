@@ -42,7 +42,7 @@ struct FloatingPanelView: View {
                     .foregroundStyle(showSidebar ? .primary : .secondary)
             }
             .buttonStyle(.plain)
-            .help("Toggle channels sidebar")
+            .tooltip("Toggle channels sidebar")
 
             Circle()
                 .fill(appState.mountedRingName != nil ? .green : .red)
@@ -85,7 +85,7 @@ struct FloatingPanelView: View {
                     .foregroundStyle(appState.showThinking ? .purple : .secondary)
             }
             .buttonStyle(.plain)
-            .help(appState.showThinking ? "Hide thinking" : "Show thinking (verbose)")
+            .tooltip(appState.showThinking ? "Hide thinking" : "Show thinking (verbose)")
 
             Button {
                 appState.isPanelVisible = false
@@ -118,7 +118,7 @@ struct FloatingPanelView: View {
                         .foregroundStyle(appState.mode == .voice ? .green : .secondary)
                 }
                 .buttonStyle(.plain)
-                .help(appState.mode == .voice ? "Switch to text mode" : "Switch to voice mode")
+                .tooltip(appState.mode == .voice ? "Switch to text mode" : "Switch to voice mode")
 
                 // Text input (always available)
                 TextInputField()
@@ -131,7 +131,7 @@ struct FloatingPanelView: View {
                         .font(.title3)
                 }
                 .buttonStyle(.plain)
-                .help("Remember the last exchange")
+                .tooltip("Remember the last exchange")
             }
         }
         .padding(10)
