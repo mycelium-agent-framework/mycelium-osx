@@ -49,6 +49,7 @@ struct FloatingPanelView: View {
                 .frame(width: 8, height: 8)
 
             RingSwitcher()
+            ProviderSwitcher()
 
             if !appState.statusMessage.isEmpty {
                 Text(appState.statusMessage)
@@ -193,6 +194,58 @@ struct RingSwitcher: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+    }
+}
+
+struct ProviderSwitcher: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        if appState.availableProviders.count > 1 {
+            Menu {
+                ForEach(appState.availableProviders, id: \.name) { provider in
+                    Button {
+                        appState.switchProvider(to: provider.name)
+                    } label: {
+                        HStack {
+                            Text("\(provider.name) (\(provider.model))")
+                            if provider.name == appState.activeProvider {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 2) {
+                    Image(systemName: providerIcon)
+                        .font(.caption2)
+                    Text(appState.activeProvider)
+                        .font(.caption2)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 7))
+                }
+                .foregroundStyle(.secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        } else if !appState.activeProvider.isEmpty {
+            HStack(spacing: 2) {
+                Image(systemName: providerIcon)
+                    .font(.caption2)
+                Text(appState.activeProvider)
+                    .font(.caption2)
+            }
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    private var providerIcon: String {
+        switch appState.activeProvider {
+        case "ollama": return "desktopcomputer"
+        case "claude": return "brain"
+        case "gemini": return "cloud"
+        default: return "questionmark.circle"
+        }
     }
 }
 
