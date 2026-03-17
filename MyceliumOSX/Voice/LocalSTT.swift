@@ -20,7 +20,7 @@ final class LocalSTT {
     /// Called with each partial update (for live display).
     var onPartialText: ((String) -> Void)?
 
-    /// Called when user stops speaking and final text is available.
+    /// Called when final text is available (after stop or isFinal).
     var onFinalText: ((String) -> Void)?
 
     /// Request speech recognition authorization.
@@ -42,13 +42,11 @@ final class LocalSTT {
             throw STTError.notAvailable
         }
 
-        // Cancel any existing task
         recognitionTask?.cancel()
         recognitionTask = nil
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        // Force on-device recognition (no network)
         if #available(macOS 13, *) {
             request.requiresOnDeviceRecognition = true
         }
@@ -76,14 +74,21 @@ final class LocalSTT {
 
                 if result.isFinal {
                     DispatchQueue.main.async {
+                        print("[LocalSTT] Final text: \(text)")
                         self.onFinalText?(text)
+                        self.cleanUp()
                     }
                 }
             }
 
-            if error != nil {
+            if let error {
+                print("[LocalSTT] Recognition error: \(error.localizedDescription)")
                 DispatchQueue.main.async {
-                    self.stopInternal()
+                    // Emit whatever we have as final before cleaning up
+                    if !self.currentText.isEmpty {
+                        self.onFinalText?(self.currentText)
+                    }
+                    self.cleanUp()
                 }
             }
         }
@@ -92,23 +97,32 @@ final class LocalSTT {
         currentText = ""
     }
 
-    /// Stop listening and finalize.
+    /// Stop listening. Signals end of audio, waits for final result via callback.
     func stop() {
         guard isListening else { return }
 
-        // End the audio stream — this triggers the final result
+        // Stop the audio engine and end the audio stream.
+        // This tells SFSpeechRecognizer we're done — it will deliver
+        // one final result via the callback, which triggers cleanUp().
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
-        stopInternal()
+        isListening = false
 
-        // If we have accumulated text, emit it as final
-        if !currentText.isEmpty {
-            onFinalText?(currentText)
+        // Safety: if the final callback doesn't fire within 3 seconds,
+        // emit what we have and clean up.
+        let capturedText = currentText
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+            guard let self, self.recognitionTask != nil else { return }
+            print("[LocalSTT] Timeout waiting for final result, using: \(capturedText)")
+            if !capturedText.isEmpty {
+                self.onFinalText?(capturedText)
+            }
+            self.cleanUp()
         }
     }
 
-    private func stopInternal() {
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
+    private func cleanUp() {
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
