@@ -122,6 +122,8 @@ final class LocalVoiceSession {
 
     // MARK: - Pipeline
 
+    private var isProcessingVoice = false
+
     private func handleUserSpeech(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -129,6 +131,12 @@ final class LocalVoiceSession {
             return
         }
 
+        // Prevent duplicate processing (STT can fire onFinalText more than once)
+        guard !isProcessingVoice else {
+            print("[LocalVoice] Ignoring duplicate final text: \(trimmed.prefix(30))")
+            return
+        }
+        isProcessingVoice = true
         partialUserText = ""
 
         // Add user transcript
@@ -150,6 +158,7 @@ final class LocalVoiceSession {
 
                 guard !responseText.isEmpty else {
                     onStatusMessage?("Ready — hold to talk")
+                    isProcessingVoice = false
                     return
                 }
 
@@ -167,6 +176,7 @@ final class LocalVoiceSession {
                 print("[LocalVoice] Ollama error: \(error)")
                 onStatusMessage?("Error: \(error.localizedDescription)")
             }
+            isProcessingVoice = false
         }
     }
 }
