@@ -22,5 +22,7 @@
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>Mycelium needs microphone access for voice conversations with Vivian.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Mycelium uses on-device speech recognition to transcribe your voice for Vivian.</string>
 </dict>
 </plist>

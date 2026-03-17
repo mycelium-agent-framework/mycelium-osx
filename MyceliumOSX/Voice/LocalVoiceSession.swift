@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 /// Local voice pipeline: SFSpeechRecognizer → Ollama → AVSpeechSynthesizer.
@@ -53,6 +54,47 @@ final class LocalVoiceSession {
             interrupt()
         }
 
+        // Check speech recognition authorization first
+        let authStatus = LocalSTT.authorizationStatus()
+        if authStatus == .notDetermined {
+            onStatusMessage?("Requesting speech permission...")
+            Task {
+                let status = await LocalSTT.requestAuthorization()
+                if status == .authorized {
+                    beginRecording()
+                } else {
+                    onStatusMessage?("Speech recognition denied — System Settings > Privacy > Speech Recognition")
+                    print("[LocalVoice] Speech recognition denied: \(status.rawValue)")
+                }
+            }
+            return
+        }
+
+        guard authStatus == .authorized else {
+            onStatusMessage?("Speech recognition not authorized — System Settings > Privacy > Speech Recognition")
+            print("[LocalVoice] Speech recognition not authorized: \(authStatus.rawValue)")
+            return
+        }
+
+        // Also check mic permission
+        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        if micStatus == .notDetermined {
+            Task {
+                let granted = await AVCaptureDevice.requestAccess(for: .audio)
+                if granted { beginRecording() }
+                else { onStatusMessage?("Microphone access denied") }
+            }
+            return
+        }
+        guard micStatus == .authorized else {
+            onStatusMessage?("Microphone not authorized — System Settings > Privacy > Microphone")
+            return
+        }
+
+        beginRecording()
+    }
+
+    private func beginRecording() {
         do {
             try stt.start()
             isRecording = true
