@@ -105,16 +105,23 @@ final class AppState {
         return voiceSession.isSpeaking
     }
 
-    // MARK: - Text / Local LLM
+    // MARK: - Backends
 
-    private var textClient: GeminiTextClient?
+    private var geminiClient: GeminiTextClient?
     private var ollamaClient: OllamaClient?
+    private var claudeClient: ClaudeCliClient?
+    private var claudeSessionId: String?
     private var ollamaHistory: [OllamaClient.Message] = []
     let localTTS = LocalTTS()
     private(set) var currentApiKey: String?
     private(set) var currentSystemInstruction: String = ""
-    /// True when Ollama is available and should be used as primary.
-    private(set) var useLocalModel = false
+
+    /// Available providers for the current ring (checked at mount time).
+    var availableProviders: [ProviderConfig] = []
+    /// Currently selected provider name.
+    var activeProvider: String = ""
+    /// Whether the active provider is local (Ollama).
+    var useLocalModel: Bool { activeProvider == "ollama" }
 
     // MARK: - Stores
 
@@ -209,7 +216,9 @@ final class AppState {
         if let store = transcriptStore {
             transcript = store.loadRecentEntries(channel: channel.name, limit: 50)
         }
-        Task { await textClient?.clearHistory() }
+        Task { await geminiClient?.clearHistory() }
+        ollamaHistory = []
+        claudeSessionId = nil
     }
 
     func createChannel(name: String) {
@@ -233,11 +242,7 @@ final class AppState {
             return
         }
 
-        guard let apiKey = deps.keychainGet(backend.apiKeyRef) else {
-            statusMessage = "No API key for '\(backend.apiKeyRef)'. Open Settings."
-            return
-        }
-
+        // Build system instruction
         var instruction = soulContent
         if let ringPath = mountedRingPath {
             if let ringSoul = deps.loadSOUL(ringPath) {
@@ -250,47 +255,70 @@ final class AppState {
                 instruction += "\n\n---\nPrevious session context:\n" + recap
             }
         }
-
-        currentApiKey = apiKey
         currentSystemInstruction = instruction
 
-        textClient = deps.makeTextClient(apiKey, instruction)
-        voiceSession.configure(apiKey: apiKey, systemInstruction: instruction)
+        // Resolve providers from manifest
+        let providers = backend.resolvedProviders
+        availableProviders = providers
 
-        // Check if Ollama is available for local-first mode
-        checkOllamaAvailability(systemInstruction: instruction)
-    }
-
-    private func checkOllamaAvailability(systemInstruction: String) {
-        let client = OllamaClient(model: "gemma3:4b", systemInstruction: systemInstruction)
-        ollamaClient = client
-        statusMessage = "Checking local model..."
-        print("[AppState] Checking Ollama availability...")
-
-        Task {
-            let available = await client.isAvailable()
-            self.useLocalModel = available
-            print("[AppState] Ollama check result: available=\(available), useLocalModel=\(self.useLocalModel)")
-
-            if available {
-                // Warmup: first Ollama call loads the model into memory
-                statusMessage = "Loading local model..."
-                isProcessing = true
-                let start = Date()
-                do {
-                    let _ = try await client.send(prompt: "Ready.", history: [])
-                    let elapsed = String(format: "%.1f", Date().timeIntervalSince(start))
-                    print("[AppState] Ollama warmup in \(elapsed)s")
-                } catch {
-                    print("[AppState] Ollama warmup failed: \(error)")
+        // Initialize each provider
+        for p in providers {
+            switch p.name {
+            case "ollama":
+                ollamaClient = OllamaClient(model: p.model, systemInstruction: instruction)
+            case "claude":
+                claudeClient = ClaudeCliClient(model: p.model, systemPrompt: instruction)
+            case "gemini":
+                if let ref = p.apiKeyRef, let apiKey = deps.keychainGet(ref) {
+                    currentApiKey = apiKey
+                    geminiClient = deps.makeTextClient(apiKey, instruction)
+                    voiceSession.configure(apiKey: apiKey, systemInstruction: instruction)
                 }
-                isProcessing = false
-                statusMessage = "Ready (local: gemma3:4b)"
-            } else if let ring = mountedRingName {
-                statusMessage = "Ring: \(ring) (cloud)"
-                print("[AppState] Ollama not available — falling back to Gemini")
+            default:
+                print("[AppState] Unknown provider: \(p.name)")
             }
         }
+
+        // Select default: first provider in the list
+        if activeProvider.isEmpty || !providers.contains(where: { $0.name == activeProvider }) {
+            if let first = providers.first {
+                activeProvider = first.name
+                let model = first.model
+                statusMessage = "Ready (\(first.name): \(model))"
+                print("[AppState] Default provider: \(first.name)")
+            }
+        }
+
+        // Async: verify availability and adjust if needed
+        verifyProviderAvailability()
+    }
+
+    private func verifyProviderAvailability() {
+        Task {
+            // If active provider is ollama, verify it's actually running
+            if activeProvider == "ollama", let client = ollamaClient {
+                let available = await client.isAvailable()
+                if !available {
+                    print("[AppState] Ollama not available, falling back")
+                    // Fall back to next provider
+                    if let next = availableProviders.first(where: { $0.name != "ollama" }) {
+                        activeProvider = next.name
+                        statusMessage = "Ready (\(next.name): \(next.model))"
+                    }
+                }
+            }
+        }
+    }
+
+    /// Switch to a specific provider by name.
+    func switchProvider(to name: String) {
+        guard availableProviders.contains(where: { $0.name == name }) else { return }
+        activeProvider = name
+        ollamaHistory = []  // Clear history on provider switch
+        claudeSessionId = nil
+        let model = availableProviders.first(where: { $0.name == name })?.model ?? ""
+        statusMessage = "Switched to \(name)\(model.isEmpty ? "" : " (\(model))")"
+        print("[AppState] Switched provider to \(name)")
     }
 
     // MARK: - Text Input
@@ -304,83 +332,72 @@ final class AppState {
             return
         }
 
+        guard !activeProvider.isEmpty else {
+            statusMessage = "Not configured. Open Settings."
+            return
+        }
+
         isProcessing = true
         let startTime = Date()
-        print("[AppState] sendTextMessage: useLocalModel=\(useLocalModel), ollamaClient=\(ollamaClient != nil), textClient=\(textClient != nil)")
+        print("[AppState] sendTextMessage via \(activeProvider): \(text.prefix(50))")
 
-        if useLocalModel, let ollama = ollamaClient {
-            // Local-first: use Ollama
-            statusMessage = "Local..."
-            print("[AppState] Sending to Ollama: \(text.prefix(50))")
+        Task {
+            do {
+                let response = try await sendToProvider(text: text)
+                let elapsed = String(format: "%.1f", Date().timeIntervalSince(startTime))
+                print("[AppState] \(activeProvider) response in \(elapsed)s")
 
-            Task {
-                do {
-                    let response = try await ollama.send(prompt: text, history: ollamaHistory)
-                    let elapsed = String(format: "%.1f", Date().timeIntervalSince(startTime))
-                    print("[AppState] Ollama response in \(elapsed)s: \(response.prefix(80))")
-
-                    OllamaClient.appendToHistory(&ollamaHistory, role: "user", content: text)
-                    OllamaClient.appendToHistory(&ollamaHistory, role: "assistant", content: response)
-                    OllamaClient.truncateHistory(&ollamaHistory)
-
-                    let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !trimmed.isEmpty {
-                        let modelEntry = TranscriptEntry(role: .model, text: trimmed, originPop: deviceId)
-                        appendTranscriptEntry(modelEntry)
-                    }
-                    statusMessage = useLocalModel ? "Ready (local)" : (mountedRingName ?? "")
-                } catch {
-                    print("[AppState] Ollama error: \(error), falling back to Gemini")
-                    // Fallback to Gemini
-                    await sendViaGemini(text: text, startTime: startTime)
+                let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    appendTranscriptEntry(TranscriptEntry(role: .model, text: trimmed, originPop: deviceId))
                 }
-                isProcessing = false
+                let model = availableProviders.first(where: { $0.name == activeProvider })?.model ?? ""
+                statusMessage = "Ready (\(activeProvider)\(model.isEmpty ? "" : ": \(model)"))"
+            } catch {
+                print("[AppState] \(activeProvider) error: \(error)")
+                statusMessage = "Error: \(error.localizedDescription)"
+                appendTranscriptEntry(TranscriptEntry(role: .system, text: "Error: \(error.localizedDescription)", originPop: deviceId))
             }
-        } else if textClient != nil {
-            // Cloud: use Gemini
-            statusMessage = "Thinking..."
-            let timerTask = Task { @MainActor in
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(1))
-                    guard !Task.isCancelled else { break }
-                    let elapsed = Int(Date().timeIntervalSince(startTime))
-                    self.statusMessage = "Thinking... (\(elapsed)s)"
-                }
-            }
-            Task {
-                await sendViaGemini(text: text, startTime: startTime)
-                timerTask.cancel()
-                isProcessing = false
-            }
-        } else {
-            statusMessage = "Not configured. Open Settings."
             isProcessing = false
         }
     }
 
-    private func sendViaGemini(text: String, startTime: Date) async {
-        guard let client = textClient else { return }
-        do {
-            let response = try await client.send(text)
-            let elapsed = String(format: "%.1f", Date().timeIntervalSince(startTime))
-            print("[AppState] Gemini response in \(elapsed)s")
+    private func sendToProvider(text: String) async throws -> String {
+        switch activeProvider {
+        case "ollama":
+            guard let client = ollamaClient else { throw ProviderError.notConfigured("ollama") }
+            let response = try await client.send(prompt: text, history: ollamaHistory)
+            OllamaClient.appendToHistory(&ollamaHistory, role: "user", content: text)
+            OllamaClient.appendToHistory(&ollamaHistory, role: "assistant", content: response)
+            OllamaClient.truncateHistory(&ollamaHistory)
+            return response
 
+        case "claude":
+            guard let client = claudeClient else { throw ProviderError.notConfigured("claude") }
+            let response = try await client.sendAndUpdateSession(text)
+            return response
+
+        case "gemini":
+            guard let client = geminiClient else { throw ProviderError.notConfigured("gemini") }
+            let response = try await client.send(text)
             for tc in response.toolCalls {
                 handleToolCall(callId: tc.id, name: tc.name, args: tc.args)
             }
-            if !response.text.isEmpty {
-                let modelEntry = TranscriptEntry(
-                    role: .model,
-                    text: response.text.trimmingCharacters(in: .whitespacesAndNewlines),
-                    originPop: deviceId
-                )
-                appendTranscriptEntry(modelEntry)
+            return response.text
+
+        default:
+            throw ProviderError.unknown(activeProvider)
+        }
+    }
+
+    enum ProviderError: Error, LocalizedError {
+        case notConfigured(String)
+        case unknown(String)
+        var errorDescription: String? {
+            switch self {
+            case .notConfigured(let name): return "\(name) not configured"
+            case .unknown(let name): return "Unknown provider: \(name)"
             }
-            statusMessage = mountedRingName ?? ""
-        } catch {
-            print("[AppState] Gemini error: \(error)")
-            statusMessage = "Error: \(error.localizedDescription)"
-            appendTranscriptEntry(TranscriptEntry(role: .system, text: "Error: \(error.localizedDescription)", originPop: deviceId))
         }
     }
 

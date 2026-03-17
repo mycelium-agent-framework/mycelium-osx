@@ -47,6 +47,7 @@
 		C028EE62AA6C5E03A7295249 /* SporeStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ED34F9531E5E2177A2E8EAA /* SporeStore.swift */; };
 		C48AA5D32DD2E8B2A1CAC0A5 /* ClaudeCliClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E59E9269AED0D6E92E4CDCF4 /* ClaudeCliClientTests.swift */; };
 		C7E3471E48C7BD3C38D9745B /* TranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7A06354E1C25CB0EC5BECDC /* TranscriptView.swift */; };
+		CE428322810B1449F3F99964 /* BackendRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FC8B15DA8B1958DB1C86F75 /* BackendRoutingTests.swift */; };
 		CECEA2C65EEC670B18E1585E /* TranscriptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DD1D292CD9BC66EF3CF130B /* TranscriptStore.swift */; };
 		D1117E273BA613D067C4918C /* AudioCaptureManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B9BEA44B5ECE6E0FC4AFBE /* AudioCaptureManager.swift */; };
 		DAE212747B4225E9406428A4 /* VoiceSessionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1028E1466E4D8AB6CF150BD6 /* VoiceSessionManagerTests.swift */; };
@@ -91,6 +92,7 @@
 		52E135D498E41F7346AC2018 /* OllamaClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OllamaClient.swift; sourceTree = "<group>"; };
 		5521E96E28BA3976F64A590E /* ChannelListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChannelListView.swift; sourceTree = "<group>"; };
 		5BF6E25991D81F57044D975E /* LocalVoiceSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalVoiceSessionTests.swift; sourceTree = "<group>"; };
+		5FC8B15DA8B1958DB1C86F75 /* BackendRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendRoutingTests.swift; sourceTree = "<group>"; };
 		6164E8D838ED32FB91EAC84A /* TranscriptStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStoreTests.swift; sourceTree = "<group>"; };
 		616A162A47CEE3099C20F1E9 /* Channel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Channel.swift; sourceTree = "<group>"; };
 		616ED4BD3AE5A2751A3D4440 /* TranscriptEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptEntry.swift; sourceTree = "<group>"; };
@@ -199,6 +201,7 @@
 			isa = PBXGroup;
 			children = (
 				04F4A69569554B2CD72AA79D /* AppStateTests.swift */,
+				5FC8B15DA8B1958DB1C86F75 /* BackendRoutingTests.swift */,
 				E59E9269AED0D6E92E4CDCF4 /* ClaudeCliClientTests.swift */,
 				3F62A49C6DEA295B3BE709DA /* GeminiLiveClientTests.swift */,
 				79029EAAF6A81C7725FDEE71 /* GeminiTextClientTests.swift */,
@@ -399,6 +402,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				51DC18127B8203964B9E2B9B /* AppStateTests.swift in Sources */,
+				CE428322810B1449F3F99964 /* BackendRoutingTests.swift in Sources */,
 				C48AA5D32DD2E8B2A1CAC0A5 /* ClaudeCliClientTests.swift in Sources */,
 				23D89162B85D1970A95840FF /* GeminiLiveClientTests.swift in Sources */,
 				B0BA7A0E338CE444BFBD0803 /* GeminiTextClientTests.swift in Sources */,

@@ -35,7 +35,9 @@ final class AppStateTests: XCTestCase {
             agentName: "Vivian", version: "0.1.0",
             pops: [PopEntry(deviceId: "osx-desktop", displayName: "Mac", capabilities: [], lastActive: nil, allowedRings: ["vivian-main"])],
             rings: [RingEntry(name: "vivian-main", repoUrl: "url", accessRules: [:],
-                              backend: BackendConfig(provider: "gemini", apiKeyRef: "test-key", model: "test-model"))],
+                              backend: BackendConfig(providers: [
+                                ProviderConfig(name: "gemini", model: "test-model", apiKeyRef: "test-key")
+                              ]))],
             channels: [], activeRing: nil
         )
 
@@ -170,8 +172,9 @@ final class AppStateTests: XCTestCase {
         state.bootstrap(ring0Path: tempDir)
         state.mountRing(path: ringDir, name: "vivian-main")
 
-        XCTAssertTrue(state.statusMessage.contains("No API key"))
+        // Provider is set but gemini client won't be initialized without a key
         XCTAssertNil(state.currentApiKey)
+        XCTAssertEqual(state.activeProvider, "gemini")
     }
 
     func testBackendConfigIncludesRingSOUL() {
@@ -234,7 +237,6 @@ final class AppStateTests: XCTestCase {
         appState.sendTextMessage("hello")
 
         XCTAssertTrue(appState.isProcessing)
-        XCTAssertEqual(appState.statusMessage, "Thinking...")
     }
 
     // MARK: - Voice Mode

@@ -364,11 +364,13 @@ struct ApiKeyListView: View {
         var saved: Set<String> = []
 
         for ring in manifest.rings {
-            if let backend = ring.backend {
-                refs.append((ring.name, backend.apiKeyRef, backend.provider, backend.model))
-                if let existing = KeychainManager.get(ref: backend.apiKeyRef) {
-                    values[backend.apiKeyRef] = existing
-                    saved.insert(backend.apiKeyRef)
+            guard let backend = ring.backend else { continue }
+            for provider in backend.resolvedProviders {
+                guard let ref = provider.apiKeyRef, !ref.isEmpty else { continue }
+                refs.append((ring.name, ref, provider.name, provider.model))
+                if let existing = KeychainManager.get(ref: ref) {
+                    values[ref] = existing
+                    saved.insert(ref)
                 }
             }
         }
